@@ -39,46 +39,10 @@ data "aws_subnet" "default" {
   availability_zone = "${var.aws_region}a"
 }
 
-# Security Group
-resource "aws_security_group" "quizspark_sg" {
-  name        = "quizspark-sg"
-  description = "Security group for QuizSpark application"
-  vpc_id      = data.aws_vpc.default.id
-
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "SSH access"
-  }
-
-  ingress {
-    from_port   = 3000
-    to_port     = 3000
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "Application port"
-  }
-
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "HTTP"
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "quizspark-sg"
-  }
+# Get existing security group
+data "aws_security_group" "quizspark_sg" {
+  name = "quizspark-sg"
+  vpc_id = data.aws_vpc.default.id
 }
 
 # EC2 Instance
@@ -88,7 +52,7 @@ resource "aws_instance" "quizspark" {
   subnet_id     = data.aws_subnet.default.id
   key_name      = var.key_name
 
-  vpc_security_group_ids = [aws_security_group.quizspark_sg.id]
+  vpc_security_group_ids = [data.aws_security_group.quizspark_sg.id]
 
   user_data = <<-EOF
               #!/bin/bash
