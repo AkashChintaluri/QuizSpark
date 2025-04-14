@@ -52,10 +52,10 @@ function SignupForm() {
     };
 
     return (
-        <div className="signup-container">
-            <div className="signup-box">
+        <div className="signup">
+            <div className="signup-content">
                 <h2>Sign Up</h2>
-                <form onSubmit={handleSubmit}>
+                <form className="signup-form" onSubmit={handleSubmit}>
                     <div className="form-group">
                         <label htmlFor="username">Username</label>
                         <input
@@ -64,6 +64,7 @@ function SignupForm() {
                             value={formData.username}
                             onChange={handleInputChange}
                             required
+                            placeholder="Enter your username"
                         />
                     </div>
                     <div className="form-group">
@@ -74,6 +75,7 @@ function SignupForm() {
                             value={formData.email}
                             onChange={handleInputChange}
                             required
+                            placeholder="Enter your email"
                         />
                     </div>
                     <div className="form-group">
@@ -84,10 +86,11 @@ function SignupForm() {
                             value={formData.password}
                             onChange={handleInputChange}
                             required
+                            placeholder="Enter your password"
                         />
                     </div>
-                    <div className="form-group">
-                        <label htmlFor="userType">I am a:</label>
+                    <div className="form-group select-group">
+                        <span className="select-placeholder">I am a:</span>
                         <select
                             id="userType"
                             value={formData.userType}
@@ -99,13 +102,13 @@ function SignupForm() {
                         </select>
                     </div>
                     {errorMessage && <div className="error-message">{errorMessage}</div>}
-                    <button type="submit" disabled={isLoading}>
+                    <button className="signup-button" type="submit" disabled={isLoading}>
                         {isLoading ? 'Creating Account...' : 'Sign Up'}
                     </button>
                 </form>
             </div>
             {showPopup && (
-                <div className="popup">
+                <div className="popup success">
                     <p>Account created successfully! Redirecting to login...</p>
                 </div>
             )}

@@ -73,7 +73,14 @@ function StudentDashboard() {
     };
 
     if (loading) {
-        return <div className="loading-screen">Loading dashboard...</div>;
+        return (
+            <div className="student-dashboard">
+                <div className="loading-overlay">
+                    <div className="spinner"></div>
+                    <p>Loading dashboard...</p>
+                </div>
+            </div>
+        );
     }
 
     return (
@@ -95,7 +102,12 @@ function StudentDashboard() {
                     />
                 </>
             ) : (
-                <div className="auth-message">Session expired. Redirecting to login...</div>
+                <div className="auth-error">
+                    <div className="error-message">
+                        <span className="error-icon">⚠️</span>
+                        <p>Session expired. Please log in again.</p>
+                    </div>
+                </div>
             )}
         </div>
     );

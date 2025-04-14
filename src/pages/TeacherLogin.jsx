@@ -48,10 +48,10 @@ function TeacherLogin() {
     };
 
     return (
-        <div className="login-container">
-            <div className="login-box">
+        <div className="login">
+            <div className="login-content">
                 <h2>Teacher Login</h2>
-                <form onSubmit={handleSubmit}>
+                <form className="login-form" onSubmit={handleSubmit}>
                     <div className="form-group">
                         <label htmlFor="username">Username</label>
                         <input
@@ -60,6 +60,7 @@ function TeacherLogin() {
                             value={formData.username}
                             onChange={handleInputChange}
                             required
+                            placeholder="Enter your username"
                         />
                     </div>
                     <div className="form-group">
@@ -70,10 +71,11 @@ function TeacherLogin() {
                             value={formData.password}
                             onChange={handleInputChange}
                             required
+                            placeholder="Enter your password"
                         />
                     </div>
                     {errorMessage && <div className="error-message">{errorMessage}</div>}
-                    <button type="submit" disabled={isLoading}>
+                    <button className="login-button" type="submit" disabled={isLoading}>
                         {isLoading ? 'Logging in...' : 'Login'}
                     </button>
                 </form>

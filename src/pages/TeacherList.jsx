@@ -69,18 +69,37 @@ function TeacherList({ studentId }) {
     );
 
     if (loading) {
-        return <div className="teacher-list"><div className="loading">Loading teachers...</div></div>;
+        return (
+            <div className="teacher-list">
+                <div className="loading-overlay">
+                    <div className="spinner"></div>
+                    <p>Loading teachers...</p>
+                </div>
+            </div>
+        );
     }
 
     if (error) {
-        return <div className="teacher-list"><div className="error-message">{error}</div></div>;
+        return (
+            <div className="teacher-list">
+                <div className="error-message">
+                    <span className="error-icon">⚠️</span>
+                    <p>{error}</p>
+                </div>
+            </div>
+        );
     }
 
     return (
         <div className="teacher-list">
-            <h3>Your Teachers</h3>
+            <div className="section-header">
+                <h3>Your Teachers</h3>
+            </div>
+            
             {subscribedTeachers.length === 0 ? (
-                <div className="no-teachers">You haven't subscribed to any teachers yet.</div>
+                <div className="empty-state">
+                    <p>You haven't subscribed to any teachers yet.</p>
+                </div>
             ) : (
                 <div className="teacher-grid">
                     {subscribedTeachers.map((teacher) => (
@@ -90,9 +109,9 @@ function TeacherList({ studentId }) {
                                 <p>{teacher.email}</p>
                             </div>
                             <div className="teacher-actions">
-                                <span className="status subscribed">Subscribed</span>
+                                <span className="status-badge subscribed">Subscribed</span>
                                 <button
-                                    className="subscribed-btn"
+                                    className="action-button unsubscribe"
                                     onClick={() => handleUnsubscribe(teacher.id)}
                                 >
                                     Unsubscribe
@@ -103,32 +122,38 @@ function TeacherList({ studentId }) {
                 </div>
             )}
 
-            <div className="unsubscribed-section">
+            <div className="teacher-search-section">
                 <button
-                    className="dropdown-toggle"
+                    className="toggle-button"
                     onClick={() => setShowDropdown(!showDropdown)}
                 >
                     {showDropdown ? 'Hide Available Teachers' : 'Show Available Teachers'}
                 </button>
 
                 {showDropdown && (
-                    <div className="dropdown-menu">
-                        <input
-                            type="text"
-                            className="search-input"
-                            placeholder="Search teachers..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
+                    <div className="search-dropdown">
+                        <div className="search-bar">
+                            <span className="search-icon">🔍</span>
+                            <input
+                                type="text"
+                                className="search-input"
+                                placeholder="Search teachers..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+                        
                         {filteredUnsubscribedTeachers.length === 0 ? (
-                            <div className="no-teachers">No teachers found</div>
+                            <div className="empty-state">
+                                <p>No teachers found</p>
+                            </div>
                         ) : (
-                            <ul className="teacher-dropdown-list">
+                            <ul className="teacher-list-dropdown">
                                 {filteredUnsubscribedTeachers.map((teacher) => (
-                                    <li key={teacher.id} className="dropdown-item">
-                                        <span>{teacher.username}</span>
+                                    <li key={teacher.id} className="teacher-item">
+                                        <span className="teacher-name">{teacher.username}</span>
                                         <button
-                                            className="subscribe-btn"
+                                            className="action-button subscribe"
                                             onClick={() => handleSubscribe(teacher.id)}
                                         >
                                             Subscribe

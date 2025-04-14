@@ -2,256 +2,242 @@
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
 
 .teacher-list {
-    max-width: 800px;
-    margin: 1rem auto;
-    padding: 1rem;
-    background: linear-gradient(135deg, #edf2f7 0%, #ffffff 100%);
-    border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
 }
 
-.teacher-list h3 {
-    font-size: 1.8rem;
-    font-weight: 700;
-    color: #2d3748;
+.loading-overlay {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #3498db;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
     margin-bottom: 1rem;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.error-message {
+    background-color: #fee2e2;
+    border: 1px solid #ef4444;
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 1rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.error-icon {
+    font-size: 1.25rem;
+}
+
+.section-header {
+    margin-bottom: 2rem;
+}
+
+.section-header h3 {
+    font-size: 1.5rem;
+    color: #1f2937;
+    margin: 0;
+}
+
+.empty-state {
     text-align: center;
+    padding: 2rem;
+    background-color: #f9fafb;
+    border-radius: 8px;
+    color: #6b7280;
 }
 
 .teacher-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 1rem;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
 }
 
 .teacher-card {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1rem;
-    background: linear-gradient(90deg, #ffffff 0%, #f7fafc 100%);
-    border-radius: 10px;
-    border: 1px solid #e2e8f0;
-    transition: all 0.3s ease;
-}
-
-.teacher-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-    border-color: #667eea;
-}
-
-.teacher-info {
-    flex-grow: 1;
+    background-color: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .teacher-info h4 {
-    margin: 0;
-    font-size: 1.2rem;
-    font-weight: 600;
-    color: #2d3748;
+    margin: 0 0 0.5rem 0;
+    color: #1f2937;
+    font-size: 1.125rem;
 }
 
 .teacher-info p {
-    margin: 0.25rem 0 0;
-    font-size: 0.9rem;
-    color: #718096;
+    margin: 0;
+    color: #6b7280;
+    font-size: 0.875rem;
 }
 
-/* Teacher Actions */
 .teacher-actions {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-}
-
-.status {
-    font-size: 0.8rem;
-    font-weight: 600;
-    padding: 0.25rem 0.75rem;
-    border-radius: 10px;
-    text-transform: uppercase;
-}
-
-.status.subscribed {
-    background: linear-gradient(90deg, #fed7e2 0%, #fbb6ce 100%);
-    color: #742a2a;
-}
-
-/* Button Styles */
-.subscribe-btn,
-.subscribed-btn {
-    padding: 0.5rem 1rem;
-    font-size: 0.9rem;
-    font-weight: 600;
-    border: none;
-    border-radius: 20px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.subscribe-btn {
-    background: linear-gradient(90deg, #7f9cf5 0%, #667eea 100%);
-    color: #fff;
-}
-
-.subscribe-btn:hover {
-    background: linear-gradient(90deg, #667eea 0%, #5a67d8 100%);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
-}
-
-.subscribed-btn {
-    background: linear-gradient(90deg, #fc8181 0%, #f56565 100%);
-    color: #fff;
-}
-
-.subscribed-btn:hover {
-    background: linear-gradient(90deg, #f56565 0%, #e53e3e 100%);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(245, 101, 101, 0.3);
-}
-
-/* Loading and Error States */
-.loading {
-    text-align: center;
-    font-size: 1rem;
-    color: #718096;
-    padding: 1rem;
-    animation: pulse 1.5s infinite;
-}
-
-.error-message {
-    text-align: center;
-    font-size: 0.9rem;
-    color: #742a2a;
-    padding: 0.75rem;
-    background: linear-gradient(90deg, #fed7e2 0%, #fbb6ce 100%);
-    border-radius: 6px;
-}
-
-/* No Teachers State */
-.no-teachers {
-    text-align: center;
-    font-size: 0.9rem;
-    color: #718096;
-    padding: 1rem;
-    background: #fff;
-    border-radius: 8px;
-    border: 1px dashed #e2e8f0;
-}
-
-/* Dropdown Section */
-.unsubscribed-section {
+    justify-content: space-between;
     margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e5e7eb;
 }
 
-.dropdown-toggle {
-    padding: 0.75rem 1.5rem;
-    font-size: 1rem;
-    font-weight: 600;
-    background: linear-gradient(90deg, #7f9cf5 0%, #667eea 100%);
-    color: #fff;
-    border: none;
-    border-radius: 20px;
+.status-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.status-badge.subscribed {
+    background-color: #dcfce7;
+    color: #166534;
+}
+
+.action-button {
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
     cursor: pointer;
-    transition: all 0.3s ease;
-    display: block;
-    margin: 0 auto;
-    box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+    transition: all 0.2s;
 }
 
-.dropdown-toggle:hover {
-    background: linear-gradient(90deg, #667eea 0%, #5a67d8 100%);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(102, 126, 234, 0.5);
+.action-button.subscribe {
+    background-color: #3b82f6;
+    color: white;
+    border: none;
 }
 
-.dropdown-menu {
-    margin-top: 0.75rem;
-    background: linear-gradient(135deg, #ffffff 0%, #f7fafc 100%);
-    border-radius: 10px;
+.action-button.subscribe:hover {
+    background-color: #2563eb;
+}
+
+.action-button.unsubscribe {
+    background-color: #fee2e2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+}
+
+.action-button.unsubscribe:hover {
+    background-color: #fecaca;
+}
+
+.teacher-search-section {
+    margin-top: 2rem;
+}
+
+.toggle-button {
+    width: 100%;
+    padding: 0.75rem;
+    background-color: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    font-size: 1rem;
+    color: #4b5563;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.toggle-button:hover {
+    background-color: #e5e7eb;
+}
+
+.search-dropdown {
+    margin-top: 1rem;
     padding: 1rem;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    max-height: 250px;
-    overflow-y: auto;
+    background-color: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.search-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    background-color: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+}
+
+.search-icon {
+    color: #6b7280;
 }
 
 .search-input {
-    width: 100%;
-    padding: 0.5rem;
-    font-size: 0.9rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    margin-bottom: 0.75rem;
-    background: #edf2f7;
-    transition: all 0.3s ease;
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 0.25rem;
+    font-size: 0.875rem;
+    color: #1f2937;
 }
 
 .search-input:focus {
-    border-color: #667eea;
-    background: #fff;
-    box-shadow: 0 0 4px rgba(102, 126, 234, 0.3);
     outline: none;
 }
 
-.teacher-dropdown-list {
+.teacher-list-dropdown {
     list-style: none;
     padding: 0;
+    margin: 0;
+    max-height: 300px;
+    overflow-y: auto;
 }
 
-.dropdown-item {
+.teacher-item {
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    justify-content: space-between;
     padding: 0.75rem;
-    background: linear-gradient(90deg, #edf2f7 0%, #ffffff 100%);
-    border-radius: 6px;
-    margin-bottom: 0.5rem;
-    transition: all 0.3s ease;
+    border-bottom: 1px solid #e5e7eb;
 }
 
-.dropdown-item:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+.teacher-item:last-child {
+    border-bottom: none;
 }
 
-.dropdown-item span {
-    color: #2d3748;
-    font-size: 1rem;
+.teacher-name {
+    font-size: 0.875rem;
+    color: #1f2937;
 }
 
-/* Animation for Loading */
-@keyframes pulse {
-    0% { opacity: 1; }
-    50% { opacity: 0.5; }
-    100% { opacity: 1; }
-}
+@media (max-width: 640px) {
+    .teacher-list {
+        padding: 1rem;
+    }
 
-/* Responsive Design */
-@media (max-width: 600px) {
     .teacher-grid {
         grid-template-columns: 1fr;
     }
 
-    .teacher-card {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-
     .teacher-actions {
-        margin-top: 0.75rem;
-        width: 100%;
-        justify-content: space-between;
+        flex-direction: column;
+        gap: 0.5rem;
+        align-items: stretch;
     }
 
-    .subscribe-btn,
-    .subscribed-btn {
+    .action-button {
         width: 100%;
-    }
-
-    .dropdown-menu {
-        padding: 0.75rem;
     }
 }
