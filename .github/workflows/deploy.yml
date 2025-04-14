@@ -62,6 +62,10 @@ jobs:
 
       - name: Deploy backend
         run: |
+          # List all EC2 instances for debugging
+          echo "Listing all EC2 instances..."
+          aws ec2 describe-instances --query "Reservations[*].Instances[*].[InstanceId,Tags[?Key=='Name'].Value|[0],State.Name]" --output table
+          
           # Get the EC2 instance ID
           echo "Getting EC2 instance ID..."
           INSTANCE_ID=$(aws ec2 describe-instances \
@@ -71,10 +75,23 @@ jobs:
           
           if [ -z "$INSTANCE_ID" ]; then
             echo "Error: Could not find EC2 instance with tag Name=quizspark-server"
+            echo "Available instances:"
+            aws ec2 describe-instances --query "Reservations[*].Instances[*].[InstanceId,Tags[?Key=='Name'].Value|[0],State.Name]" --output table
             exit 1
           fi
           
           echo "Found EC2 instance: $INSTANCE_ID"
+          
+          # Verify instance state
+          INSTANCE_STATE=$(aws ec2 describe-instances \
+            --instance-ids "$INSTANCE_ID" \
+            --query "Reservations[0].Instances[0].State.Name" \
+            --output text)
+          
+          if [ "$INSTANCE_STATE" != "running" ]; then
+            echo "Error: EC2 instance is not running. Current state: $INSTANCE_STATE"
+            exit 1
+          fi
           
           # Create a temporary directory for backend files
           mkdir -p backend_deploy
