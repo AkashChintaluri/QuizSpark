@@ -1,19 +1,19 @@
-name: Deploy QuizSpark
+name: Deploy to AWS
 
 on:
   push:
     branches: [ main ]
 
 env:
-  AWS_REGION: us-east-1
-  FRONTEND_BUCKET_NAME: ${{ secrets.FRONTEND_BUCKET_NAME }}
+  AWS_REGION: ap-south-1
+  S3_BUCKET: quizspark
+  CLOUDFRONT_DISTRIBUTION_ID: E3QZQZQZQZQZQZ
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v2
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
@@ -22,91 +22,56 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.5.7"
-
-      - name: Terraform Init and Apply
-        id: terraform
-        run: |
-          cd terraform
-          terraform init
-          terraform apply -auto-approve
-          echo "EC2_PUBLIC_IP=$(terraform output -raw public_ip)" >> $GITHUB_ENV
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-          cache: 'npm'
-
       - name: Install dependencies
         run: |
-          npm ci
-          cd server && npm ci && cd ..
+          npm install
+          npm install -g @aws-amplify/cli
 
       - name: Build frontend
-        env:
-          VITE_API_URL: "http://${{ env.EC2_PUBLIC_IP }}:3000"
-        run: npm run build
-
-      - name: Deploy frontend to S3
         run: |
-          # Create a temporary directory for frontend files
-          mkdir -p frontend_deploy
-          cp -r dist/* frontend_deploy/
-          
-          # Upload frontend files to S3
-          aws s3 sync frontend_deploy/ s3://quizspark-frontend --delete
+          npm run build
 
-      - name: Deploy backend
+      - name: Deploy to S3
         run: |
-          # List all EC2 instances for debugging
-          echo "Listing all EC2 instances..."
-          aws ec2 describe-instances --query "Reservations[*].Instances[*].[InstanceId,Tags[?Key=='Name'].Value|[0],State.Name]" --output table
-          
-          # Get the EC2 instance ID
+          aws s3 sync dist/ s3://${{ env.S3_BUCKET }} --delete
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation --distribution-id ${{ env.CLOUDFRONT_DISTRIBUTION_ID }} --paths "/*"
+
+      - name: List all EC2 instances for debugging
+        run: |
+          echo "Listing all EC2 instances in ${{ env.AWS_REGION }}..."
+          aws ec2 describe-instances --region ${{ env.AWS_REGION }} --query 'Reservations[*].Instances[*].[InstanceId,Tags[?Key==`Name`].Value|[0],State.Name]' --output table
+
+      - name: Get EC2 instance ID
+        id: get-ec2
+        run: |
           echo "Getting EC2 instance ID..."
           INSTANCE_ID=$(aws ec2 describe-instances \
+            --region ${{ env.AWS_REGION }} \
             --filters "Name=tag:Name,Values=quizspark" \
-            --query "Reservations[0].Instances[0].InstanceId" \
+            --query 'Reservations[*].Instances[*].[InstanceId]' \
             --output text)
           
           if [ -z "$INSTANCE_ID" ]; then
-            echo "Error: Could not find EC2 instance with tag Name=quizspark"
-            echo "Available instances:"
-            aws ec2 describe-instances --query "Reservations[*].Instances[*].[InstanceId,Tags[?Key=='Name'].Value|[0],State.Name]" --output table
+            echo "No EC2 instance found with tag Name=quizspark in region ${{ env.AWS_REGION }}"
+            echo "::set-output name=instance_id::none"
             exit 1
+          else
+            echo "Found EC2 instance: $INSTANCE_ID"
+            echo "::set-output name=instance_id::$INSTANCE_ID"
           fi
-          
-          echo "Found EC2 instance: $INSTANCE_ID"
-          
-          # Verify instance state
-          INSTANCE_STATE=$(aws ec2 describe-instances \
-            --instance-ids "$INSTANCE_ID" \
-            --query "Reservations[0].Instances[0].State.Name" \
-            --output text)
-          
-          if [ "$INSTANCE_STATE" != "running" ]; then
-            echo "Error: EC2 instance is not running. Current state: $INSTANCE_STATE"
-            exit 1
-          fi
-          
-          # Create a temporary directory for backend files
-          mkdir -p backend_deploy
-          cp -r server/* backend_deploy/
-          rm -rf backend_deploy/node_modules
-          
-          # Copy only necessary backend files to S3
-          aws s3 sync backend_deploy/ s3://quizspark-frontend/server/ --delete --exclude "node_modules/*" --exclude ".git/*" --exclude "*.log"
-          
-          # Run deployment script on EC2
-          echo "Deploying to EC2 instance..."
+
+      - name: Deploy backend
+        if: steps.get-ec2.outputs.instance_id != 'none'
+        run: |
+          echo "Deploying backend to EC2 instance..."
           aws ssm send-command \
-            --instance-ids "$INSTANCE_ID" \
+            --region ${{ env.AWS_REGION }} \
+            --instance-ids ${{ steps.get-ec2.outputs.instance_id }} \
             --document-name "AWS-RunShellScript" \
-            --parameters 'commands=["cd /home/ubuntu && aws s3 sync s3://quizspark-frontend/server/ server/ --exclude \"node_modules/*\" --exclude \".git/*\" --exclude \"*.log\" && cd server && npm install && pm2 restart all"]'
+            --parameters 'commands=["cd /home/ubuntu/quizspark && git pull && npm install && pm2 restart all"]'
 
 
           
