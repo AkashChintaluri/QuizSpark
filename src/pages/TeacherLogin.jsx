@@ -53,7 +53,6 @@ function TeacherLogin() {
                 <h2>Teacher Login</h2>
                 <form className="login-form" onSubmit={handleSubmit}>
                     <div className="form-group">
-                        <label htmlFor="username">Username</label>
                         <input
                             type="text"
                             id="username"
@@ -64,7 +63,6 @@ function TeacherLogin() {
                         />
                     </div>
                     <div className="form-group">
-                        <label htmlFor="password">Password</label>
                         <input
                             type="password"
                             id="password"
