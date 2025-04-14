@@ -52,7 +52,13 @@ jobs:
         run: npm run build
 
       - name: Deploy frontend to S3
-        run: aws s3 sync dist/ s3://quizspark-frontend --delete
+        run: |
+          # Create a temporary directory for frontend files
+          mkdir -p frontend_deploy
+          cp -r dist/* frontend_deploy/
+          
+          # Upload frontend files to S3
+          aws s3 sync frontend_deploy/ s3://quizspark-frontend --delete
 
       - name: Deploy backend
         run: |
@@ -65,13 +71,13 @@ jobs:
           rm -rf backend_deploy/node_modules
           
           # Copy only necessary backend files to S3
-          aws s3 sync backend_deploy/ s3://quizspark-frontend/server/ --delete
+          aws s3 sync backend_deploy/ s3://quizspark-frontend/server/ --delete --exclude "node_modules/*" --exclude ".git/*" --exclude "*.log"
           
           # Run deployment script on EC2
           aws ssm send-command \
             --instance-ids $INSTANCE_ID \
             --document-name "AWS-RunShellScript" \
-            --parameters 'commands=["cd /home/ubuntu && aws s3 sync s3://quizspark-frontend/server/ server/ && cd server && npm install && pm2 restart all"]'
+            --parameters 'commands=["cd /home/ubuntu && aws s3 sync s3://quizspark-frontend/server/ server/ --exclude \"node_modules/*\" --exclude \".git/*\" --exclude \"*.log\" && cd server && npm install && pm2 restart all"]'
 
 
           
