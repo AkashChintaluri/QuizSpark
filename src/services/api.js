@@ -5,32 +5,27 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 // Auth endpoints
 export const login = async (username, password, userType) => {
     try {
-        // First get the user's profile
-        const { data: profile, error: profileError } = await supabase
-            .from('profiles')
+        // Get the user from the appropriate table based on userType
+        const tableName = userType === 'student' ? 'student_login' : 'teacher_login';
+        const { data: user, error: userError } = await supabase
+            .from(tableName)
             .select('*')
             .eq('username', username)
-            .eq('role', userType)
             .single();
 
-        if (profileError) throw profileError;
-        if (!profile) throw new Error('User not found');
+        if (userError) throw userError;
+        if (!user) throw new Error('User not found');
 
         // Then sign in with email and password
-        const { data, error } = await signIn(profile.email, password);
+        const { data, error } = await signIn(user.email, password);
         if (error) throw error;
-
-        // Verify the user type matches
-        if (profile.role !== userType) {
-            throw new Error('Invalid user type');
-        }
 
         return {
             success: true,
             user: {
                 ...data.user,
-                ...profile,
-                userType: profile.role
+                ...user,
+                userType
             }
         };
     } catch (error) {
@@ -44,9 +39,11 @@ export const login = async (username, password, userType) => {
 
 export const signup = async (userData) => {
     try {
+        const tableName = userData.userType === 'student' ? 'student_login' : 'teacher_login';
+        
         // Check if username already exists
         const { data: existingUser, error: checkError } = await supabase
-            .from('profiles')
+            .from(tableName)
             .select('username')
             .eq('username', userData.username)
             .single();
@@ -66,24 +63,24 @@ export const signup = async (userData) => {
         });
         if (error) throw error;
 
-        // Create profile
-        const { error: profileError } = await supabase
-            .from('profiles')
+        // Create user in appropriate table
+        const { error: insertError } = await supabase
+            .from(tableName)
             .insert([{
                 id: data.user.id,
                 username: userData.username,
                 email: userData.email,
-                role: userData.userType
+                password: userData.password // Note: This should be hashed in production
             }]);
 
-        if (profileError) throw profileError;
+        if (insertError) throw insertError;
 
         return {
             success: true,
             user: {
                 ...data.user,
                 username: userData.username,
-                role: userData.userType
+                userType: userData.userType
             }
         };
     } catch (error) {
@@ -187,38 +184,66 @@ export const getAttemptedQuizzes = async (userId) => {
     return response.json();
 };
 
-// Teacher-student subscription endpoints
+// Teacher-student subscription functions
 export const getTeachers = async () => {
-    const response = await fetch(`${API_BASE_URL}/api/teachers`);
-    return response.json();
-};
+    const { data, error } = await supabase
+        .from('teacher_login')
+        .select('*')
+    if (error) throw error
+    return data
+}
 
 export const getSubscriptions = async (studentId) => {
-    const response = await fetch(`${API_BASE_URL}/api/subscriptions/${studentId}`);
-    return response.json();
-};
+    const { data, error } = await supabase
+        .from('subscriptions')
+        .select(`
+            *,
+            teacher:teacher_login(*)
+        `)
+        .eq('student_id', studentId)
+    if (error) throw error
+    return data
+}
 
 export const subscribe = async (studentId, teacherId) => {
-    const response = await fetch(`${API_BASE_URL}/api/subscribe`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ student_id: studentId, teacher_id: teacherId }),
-    });
-    return response.json();
-};
+    const { data, error } = await supabase
+        .from('subscriptions')
+        .insert([{ student_id: studentId, teacher_id: teacherId }])
+        .select()
+    if (error) throw error
+    return data[0]
+}
 
 export const unsubscribe = async (studentId, teacherId) => {
-    const response = await fetch(`${API_BASE_URL}/api/unsubscribe`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ student_id: studentId, teacher_id: teacherId }),
-    });
-    return response.json();
-};
+    const { error } = await supabase
+        .from('subscriptions')
+        .delete()
+        .match({ student_id: studentId, teacher_id: teacherId })
+    if (error) throw error
+}
+
+// User profile functions
+export const updateUserProfile = async (userId, updates, userType) => {
+    const tableName = userType === 'student' ? 'student_login' : 'teacher_login';
+    const { data, error } = await supabase
+        .from(tableName)
+        .update(updates)
+        .eq('id', userId)
+        .select()
+    if (error) throw error
+    return data[0]
+}
+
+export const getUserProfile = async (userId, userType) => {
+    const tableName = userType === 'student' ? 'student_login' : 'teacher_login';
+    const { data, error } = await supabase
+        .from(tableName)
+        .select('*')
+        .eq('id', userId)
+        .single()
+    if (error) throw error
+    return data
+}
 
 // Retest request endpoints
 export const getRetestRequests = async (teacherId) => {
@@ -251,17 +276,5 @@ export const createRetestRequest = async (studentId, quizId, attemptId) => {
 // Leaderboard endpoint
 export const getQuizLeaderboard = async (quizCode) => {
     const response = await fetch(`${API_BASE_URL}/api/quiz-leaderboard/${quizCode}`);
-    return response.json();
-};
-
-// User profile endpoints
-export const updateUserProfile = async (userId, userData) => {
-    const response = await fetch(`${API_BASE_URL}/api/user-profile/${userId}`, {
-        method: 'PUT',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(userData),
-    });
     return response.json();
 }; 
