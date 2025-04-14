@@ -37,7 +37,7 @@ function StudentLogin() {
                 localStorage.setItem('user', JSON.stringify(data.user));
                 setShowPopup(true);
             } else {
-                setErrorMessage('Invalid username or password');
+                setErrorMessage(data.error || 'Invalid username or password');
             }
         } catch (error) {
             setErrorMessage('Login failed. Please try again.');

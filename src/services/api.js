@@ -1,30 +1,98 @@
+import { supabase, signIn, signUp } from './supabase';
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 // Auth endpoints
 export const login = async (username, password, userType) => {
-    const response = await fetch(`${API_BASE_URL}/login`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            username,
-            password,
-            userType
-        }),
-    });
-    return response.json();
+    try {
+        // First get the user's profile
+        const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('username', username)
+            .eq('role', userType)
+            .single();
+
+        if (profileError) throw profileError;
+        if (!profile) throw new Error('User not found');
+
+        // Then sign in with email and password
+        const { data, error } = await signIn(profile.email, password);
+        if (error) throw error;
+
+        // Verify the user type matches
+        if (profile.role !== userType) {
+            throw new Error('Invalid user type');
+        }
+
+        return {
+            success: true,
+            user: {
+                ...data.user,
+                ...profile,
+                userType: profile.role
+            }
+        };
+    } catch (error) {
+        console.error('Login error:', error);
+        return {
+            success: false,
+            error: error.message
+        };
+    }
 };
 
 export const signup = async (userData) => {
-    const response = await fetch(`${API_BASE_URL}/signup`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(userData),
-    });
-    return response.json();
+    try {
+        // Check if username already exists
+        const { data: existingUser, error: checkError } = await supabase
+            .from('profiles')
+            .select('username')
+            .eq('username', userData.username)
+            .single();
+
+        if (checkError && checkError.code !== 'PGRST116') {
+            throw checkError;
+        }
+
+        if (existingUser) {
+            throw new Error('Username already exists');
+        }
+
+        // Create auth user
+        const { data, error } = await signUp(userData.email, userData.password, {
+            username: userData.username,
+            userType: userData.userType
+        });
+        if (error) throw error;
+
+        // Create profile
+        const { error: profileError } = await supabase
+            .from('profiles')
+            .insert([{
+                id: data.user.id,
+                username: userData.username,
+                email: userData.email,
+                role: userData.userType
+            }]);
+
+        if (profileError) throw profileError;
+
+        return {
+            success: true,
+            user: {
+                ...data.user,
+                username: userData.username,
+                role: userData.userType
+            }
+        };
+    } catch (error) {
+        console.error('Signup error:', error);
+        return {
+            success: false,
+            error: error.message
+        };
+    }
 };
 
 export const changePassword = async (username, currentPassword, newPassword, userType) => {
