@@ -8,15 +8,15 @@ export const login = async (username, password, userType) => {
         // Get the user from the appropriate table based on userType
         const tableName = userType === 'student' ? 'student_login' : 'teacher_login';
         
-        // First check if the user exists
-        const { data: users, error: usersError } = await supabase
+        // First get user by username to get their email
+        const { data: users, error: userError } = await supabase
             .from(tableName)
             .select('*')
             .eq('username', username);
 
-        if (usersError) {
-            console.error('Database query error:', usersError);
-            throw usersError;
+        if (userError) {
+            console.error('Database query error:', userError);
+            throw userError;
         }
 
         if (!users || users.length === 0) {
@@ -24,17 +24,16 @@ export const login = async (username, password, userType) => {
             throw new Error('User not found');
         }
 
-        if (users.length > 1) {
-            console.error('Multiple users found with username:', username);
-            throw new Error('Invalid username');
-        }
-
         const user = users[0];
 
-        // Then sign in with email and password
-        const { data, error } = await signIn(user.email, password);
+        // Then sign in directly with password
+        const { data, error } = await supabase.auth.signInWithPassword({
+            email: user.email,
+            password: password
+        });
+
         if (error) {
-            console.error('Supabase auth error:', error);
+            console.error('Auth error:', error);
             throw error;
         }
 
@@ -57,11 +56,6 @@ export const login = async (username, password, userType) => {
 
 export const signup = async (userData) => {
     try {
-        // Validate password length
-        if (!userData.password || userData.password.length < 6) {
-            throw new Error('Password should be at least 6 characters');
-        }
-
         const tableName = userData.userType === 'student' ? 'student_login' : 'teacher_login';
         
         // Check if username already exists
@@ -79,10 +73,16 @@ export const signup = async (userData) => {
             throw new Error('Username already exists');
         }
 
-        // Create auth user
-        const { data: authData, error: authError } = await signUp(userData.email, userData.password, {
-            username: userData.username,
-            userType: userData.userType
+        // First create the auth user
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+            email: userData.email,
+            password: userData.password,
+            options: {
+                data: {
+                    username: userData.username,
+                    userType: userData.userType
+                }
+            }
         });
 
         if (authError) {
@@ -90,23 +90,22 @@ export const signup = async (userData) => {
             throw authError;
         }
 
-        if (!authData || !authData.user) {
-            console.error('No user data returned from auth signup');
-            throw new Error('Failed to create user account');
+        if (!authData?.user) {
+            throw new Error('Failed to create auth user');
         }
 
-        // Create user in appropriate table
+        // Then create the database record
         const { error: insertError } = await supabase
             .from(tableName)
             .insert([{
                 id: authData.user.id,
                 username: userData.username,
                 email: userData.email,
-                password: userData.password // Note: This should be hashed in production
+                password: userData.password
             }]);
 
         if (insertError) {
-            console.error('Error inserting user data:', insertError);
+            console.error('Error creating user record:', insertError);
             throw insertError;
         }
 
