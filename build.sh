@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Set environment variables for production
-export VITE_API_URL=https://your-api-domain.com
+export VITE_API_URL=http://$(terraform output -raw public_ip):3000
 
 # Build the application
 npm run build
