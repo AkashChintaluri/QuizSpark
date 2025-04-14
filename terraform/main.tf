@@ -39,7 +39,7 @@ data "aws_vpc" "default" {
 # Get the default subnet
 data "aws_subnet" "default" {
   vpc_id = data.aws_vpc.default.id
-  availability_zone = "${var.region}a"
+  availability_zone = "${var.aws_region}a"
 }
 
 # Get the default security group
@@ -79,7 +79,7 @@ resource "aws_iam_policy" "ssm_policy" {
           "ssm:GetParameters"
         ]
         Effect   = "Allow"
-        Resource = "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter/quizspark/*"
+        Resource = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/quizspark/*"
       }
     ]
   })
