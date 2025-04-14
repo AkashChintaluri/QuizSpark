@@ -52,7 +52,7 @@ jobs:
         run: npm run build
 
       - name: Deploy frontend to S3
-        run: aws s3 sync dist/ s3://${{ env.FRONTEND_BUCKET_NAME }} --delete
+        run: aws s3 sync dist/ s3://quizspark-frontend --delete
 
       - name: Deploy backend
         run: |
@@ -60,13 +60,13 @@ jobs:
           INSTANCE_ID=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=quizspark" --query "Reservations[0].Instances[0].InstanceId" --output text)
           
           # Copy backend files to EC2
-          aws s3 cp server/ s3://${{ env.FRONTEND_BUCKET_NAME }}/server/ --recursive
+          aws s3 cp server/ s3://quizspark-frontend/server/ --recursive
           
           # Run deployment script on EC2
           aws ssm send-command \
             --instance-ids $INSTANCE_ID \
             --document-name "AWS-RunShellScript" \
-            --parameters 'commands=["cd /home/ubuntu && aws s3 sync s3://'${{ env.FRONTEND_BUCKET_NAME }}'/server/ server/ && cd server && npm install && pm2 restart all"]'
+            --parameters 'commands=["cd /home/ubuntu && aws s3 sync s3://quizspark-frontend/server/ server/ && cd server && npm install && pm2 restart all"]'
 
 
           
