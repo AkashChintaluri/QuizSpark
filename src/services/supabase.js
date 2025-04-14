@@ -4,7 +4,9 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseKey = import.meta.env.VITE_SUPABASE_KEY
 
 if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Missing Supabase environment variables')
+  console.error('Supabase URL:', supabaseUrl)
+  console.error('Supabase Key:', supabaseKey ? 'Present' : 'Missing')
+  throw new Error('Missing Supabase environment variables. Please check your .env file and make sure VITE_SUPABASE_URL and VITE_SUPABASE_KEY are set.')
 }
 
 export const supabase = createClient(supabaseUrl, supabaseKey)
