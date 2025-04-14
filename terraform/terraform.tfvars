@@ -1,4 +1,5 @@
 aws_region     = "ap-south-1"
+ami_id         = "ami-0f5ee92e2d63afc18"  # Ubuntu 22.04 LTS in ap-south-1
 instance_type  = "t2.micro"
 key_name       = "quizspark"
 repository_url = "https://github.com/AkashChintaluri/QuizSpark.git"
