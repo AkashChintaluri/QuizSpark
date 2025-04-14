@@ -10,3 +10,6 @@ supabase_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 # VPC Configuration
 vpc_cidr = "10.0.0.0/16"
 public_subnet_cidr = "10.0.1.0/24"
+
+# S3 Configuration
+frontend_bucket_name = "quizspark-frontend"
