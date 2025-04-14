@@ -36,6 +36,25 @@ function SignupForm() {
         setIsLoading(true);
         setErrorMessage('');
 
+        // Client-side validation
+        if (!formData.username || formData.username.trim().length === 0) {
+            setErrorMessage('Username is required');
+            setIsLoading(false);
+            return;
+        }
+
+        if (!formData.email || !formData.email.includes('@')) {
+            setErrorMessage('Please enter a valid email address');
+            setIsLoading(false);
+            return;
+        }
+
+        if (!formData.password || formData.password.length < 6) {
+            setErrorMessage('Password must be at least 6 characters long');
+            setIsLoading(false);
+            return;
+        }
+
         try {
             const data = await signup(formData);
             if (data.success) {

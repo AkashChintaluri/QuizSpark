@@ -57,46 +57,63 @@ export const login = async (username, password, userType) => {
 
 export const signup = async (userData) => {
     try {
+        // Validate password length
+        if (!userData.password || userData.password.length < 6) {
+            throw new Error('Password should be at least 6 characters');
+        }
+
         const tableName = userData.userType === 'student' ? 'student_login' : 'teacher_login';
         
         // Check if username already exists
         const { data: existingUser, error: checkError } = await supabase
             .from(tableName)
             .select('username')
-            .eq('username', userData.username)
-            .single();
+            .eq('username', userData.username);
 
-        if (checkError && checkError.code !== 'PGRST116') {
+        if (checkError) {
+            console.error('Error checking existing user:', checkError);
             throw checkError;
         }
 
-        if (existingUser) {
+        if (existingUser && existingUser.length > 0) {
             throw new Error('Username already exists');
         }
 
         // Create auth user
-        const { data, error } = await signUp(userData.email, userData.password, {
+        const { data: authData, error: authError } = await signUp(userData.email, userData.password, {
             username: userData.username,
             userType: userData.userType
         });
-        if (error) throw error;
+
+        if (authError) {
+            console.error('Auth signup error:', authError);
+            throw authError;
+        }
+
+        if (!authData || !authData.user) {
+            console.error('No user data returned from auth signup');
+            throw new Error('Failed to create user account');
+        }
 
         // Create user in appropriate table
         const { error: insertError } = await supabase
             .from(tableName)
             .insert([{
-                id: data.user.id,
+                id: authData.user.id,
                 username: userData.username,
                 email: userData.email,
                 password: userData.password // Note: This should be hashed in production
             }]);
 
-        if (insertError) throw insertError;
+        if (insertError) {
+            console.error('Error inserting user data:', insertError);
+            throw insertError;
+        }
 
         return {
             success: true,
             user: {
-                ...data.user,
+                ...authData.user,
                 username: userData.username,
                 userType: userData.userType
             }
@@ -105,7 +122,7 @@ export const signup = async (userData) => {
         console.error('Signup error:', error);
         return {
             success: false,
-            error: error.message
+            error: error.message || 'Signup failed'
         };
     }
 };
