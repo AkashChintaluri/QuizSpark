@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { login } from '../services/api';
 import './Login.css';
 
 function StudentLogin() {
@@ -31,20 +31,16 @@ function StudentLogin() {
         setErrorMessage('');
 
         try {
-            const response = await axios.post('http://localhost:3000/login', {
-                ...formData,
-                userType: 'student'
-            });
-
-            if (response.data.success) {
-                localStorage.setItem('user', JSON.stringify(response.data.user));
+            const data = await login(formData.username, formData.password, 'student');
+            
+            if (data.success) {
+                localStorage.setItem('user', JSON.stringify(data.user));
                 setShowPopup(true);
             } else {
                 setErrorMessage('Invalid username or password');
             }
         } catch (error) {
-            const serverError = error.response?.data?.error || error.message;
-            setErrorMessage(serverError || 'Login failed. Please try again.');
+            setErrorMessage('Login failed. Please try again.');
             console.error('Login error:', error);
         } finally {
             setIsLoading(false);
@@ -52,50 +48,39 @@ function StudentLogin() {
     };
 
     return (
-        <div className="login">
-            <div className="login-content">
+        <div className="login-container">
+            <div className="login-box">
                 <h2>Student Login</h2>
-                <form className="login-form" onSubmit={handleSubmit}>
+                <form onSubmit={handleSubmit}>
                     <div className="form-group">
+                        <label htmlFor="username">Username</label>
                         <input
                             type="text"
                             id="username"
                             value={formData.username}
                             onChange={handleInputChange}
                             required
-                            placeholder="Username"
-                            autoComplete="username"
-                            disabled={isLoading}
                         />
                     </div>
                     <div className="form-group">
+                        <label htmlFor="password">Password</label>
                         <input
                             type="password"
                             id="password"
                             value={formData.password}
                             onChange={handleInputChange}
                             required
-                            placeholder="Password"
-                            autoComplete="current-password"
-                            disabled={isLoading}
                         />
                     </div>
-
                     {errorMessage && <div className="error-message">{errorMessage}</div>}
-
-                    <button
-                        type="submit"
-                        className="login-button"
-                        disabled={isLoading}
-                    >
-                        {isLoading ? 'Logging In...' : 'Login'}
+                    <button type="submit" disabled={isLoading}>
+                        {isLoading ? 'Logging in...' : 'Login'}
                     </button>
                 </form>
             </div>
-
             {showPopup && (
-                <div className="popup success">
-                    ✔️ Login successful! Redirecting to dashboard...
+                <div className="popup">
+                    <p>Login successful! Redirecting...</p>
                 </div>
             )}
         </div>

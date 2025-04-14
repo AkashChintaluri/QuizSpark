@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import { getTeachers, getSubscriptions, subscribe, unsubscribe } from '../services/api';
 import './TeacherList.css';
-
-const API_BASE_URL = 'http://localhost:3000';
 
 function TeacherList({ studentId }) {
     const [teachers, setTeachers] = useState([]);
@@ -18,25 +16,25 @@ function TeacherList({ studentId }) {
 
     const fetchTeachers = async () => {
         try {
-            const [teachersRes, subsRes] = await Promise.all([
-                axios.get(`${API_BASE_URL}/api/teachers`),
-                axios.get(`${API_BASE_URL}/api/subscriptions/${studentId}`)
+            const [teachersData, subsData] = await Promise.all([
+                getTeachers(),
+                getSubscriptions(studentId)
             ]);
             
-            if (Array.isArray(teachersRes.data)) {
-                setTeachers(teachersRes.data);
+            if (Array.isArray(teachersData)) {
+                setTeachers(teachersData);
             } else {
-                console.warn('Teachers response is not an array:', teachersRes.data);
+                console.warn('Teachers response is not an array:', teachersData);
                 setTeachers([]);
                 setError('Invalid teachers data received.');
             }
 
-            if (Array.isArray(subsRes.data)) {
-                setSubscriptions(new Set(subsRes.data.map(sub => sub.id)));
+            if (Array.isArray(subsData)) {
+                setSubscriptions(new Set(subsData.map(sub => sub.id)));
             } else {
-                console.warn('Subscriptions response is not an array:', subsRes.data);
+                console.warn('Subscriptions response is not an array:', subsData);
                 setSubscriptions(new Set());
-                setError(subsRes.data?.error || 'Invalid subscriptions data received.');
+                setError(subsData?.error || 'Invalid subscriptions data received.');
             }
         } catch (err) {
             console.error('Error fetching data:', err);
@@ -48,10 +46,7 @@ function TeacherList({ studentId }) {
 
     const handleSubscribe = async (teacherId) => {
         try {
-            await axios.post(`${API_BASE_URL}/api/subscribe`, {
-                student_id: studentId,
-                teacher_id: teacherId
-            });
+            await subscribe(studentId, teacherId);
             fetchTeachers();
         } catch (err) {
             setError('Failed to subscribe to teacher');
@@ -60,10 +55,7 @@ function TeacherList({ studentId }) {
 
     const handleUnsubscribe = async (teacherId) => {
         try {
-            await axios.post(`${API_BASE_URL}/api/unsubscribe`, {
-                student_id: studentId,
-                teacher_id: teacherId
-            });
+            await unsubscribe(studentId, teacherId);
             fetchTeachers();
         } catch (err) {
             setError('Failed to unsubscribe from teacher');

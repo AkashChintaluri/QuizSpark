@@ -45,12 +45,91 @@ data "aws_security_group" "quizspark_sg" {
   vpc_id = data.aws_vpc.default.id
 }
 
+# IAM role for EC2 instance
+resource "aws_iam_role" "ec2_role" {
+  name = "quizspark_ec2_role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+# IAM policy for Systems Manager Parameter Store access
+resource "aws_iam_policy" "ssm_policy" {
+  name = "quizspark_ssm_policy"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "ssm:GetParameter",
+          "ssm:GetParameters"
+        ]
+        Effect   = "Allow"
+        Resource = "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter/quizspark/*"
+      }
+    ]
+  })
+}
+
+# IAM policy for S3 access
+resource "aws_iam_policy" "s3_policy" {
+  name = "quizspark_s3_policy"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject",
+          "s3:ListBucket",
+          "s3:DeleteObject"
+        ]
+        Effect   = "Allow"
+        Resource = [
+          "arn:aws:s3:::${var.frontend_bucket_name}",
+          "arn:aws:s3:::${var.frontend_bucket_name}/*"
+        ]
+      }
+    ]
+  })
+}
+
+# Attach policies to the role
+resource "aws_iam_role_policy_attachment" "ssm_attachment" {
+  role       = aws_iam_role.ec2_role.name
+  policy_arn = aws_iam_policy.ssm_policy.arn
+}
+
+resource "aws_iam_role_policy_attachment" "s3_attachment" {
+  role       = aws_iam_role.ec2_role.name
+  policy_arn = aws_iam_policy.s3_policy.arn
+}
+
+# Create instance profile
+resource "aws_iam_instance_profile" "ec2_profile" {
+  name = "quizspark_ec2_profile"
+  role = aws_iam_role.ec2_role.name
+}
+
 # EC2 Instance
 resource "aws_instance" "quizspark" {
   ami           = data.aws_ami.ubuntu.id
   instance_type = var.instance_type
   subnet_id     = data.aws_subnet.default.id
   key_name      = var.key_name
+  iam_instance_profile = aws_iam_instance_profile.ec2_profile.name
 
   vpc_security_group_ids = [data.aws_security_group.quizspark_sg.id]
 

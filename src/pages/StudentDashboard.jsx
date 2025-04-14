@@ -4,7 +4,18 @@ import {
     useParams,
     useLocation
 } from 'react-router-dom';
-import axios from 'axios';
+import {
+    getUpcomingQuizzes,
+    getUserStats,
+    getAttemptedQuizzes,
+    getQuizByCode,
+    submitQuizAttempt,
+    getQuizResult,
+    getQuizAttempts,
+    getQuizLeaderboard,
+    changePassword,
+    updateUserProfile
+} from '../services/api';
 import './StudentDashboard.css';
 import './TakeQuiz.css';
 import TeacherList from './TeacherList';
@@ -165,19 +176,15 @@ function HomeContent({ currentUser, setActiveTab }) {
                     throw new Error('Invalid user session');
                 }
 
-                const endpoints = [
-                    `${API_BASE_URL}/upcoming-quizzes/${currentUser.id}`,
-                    `${API_BASE_URL}/user-stats/${currentUser.id}`,
-                    `${API_BASE_URL}/attempted-quizzes/${currentUser.id}`,
-                ];
+                const [upcomingData, statsData, attemptedData] = await Promise.all([
+                    getUpcomingQuizzes(currentUser.id),
+                    getUserStats(currentUser.id),
+                    getAttemptedQuizzes(currentUser.id)
+                ]);
 
-                const [upcomingResponse, statsResponse, attemptedResponse] = await Promise.all(
-                    endpoints.map((url) => axios.get(url))
-                );
-
-                setUpcomingQuizzes(upcomingResponse.data);
-                setStats(statsResponse.data || { total_attempts: 0, average_score: 0, completed_quizzes: 0 });
-                setAttemptedQuizzes(attemptedResponse.data);
+                setUpcomingQuizzes(upcomingData);
+                setStats(statsData || { total_attempts: 0, average_score: 0, completed_quizzes: 0 });
+                setAttemptedQuizzes(attemptedData);
             } catch (err) {
                 setError('Failed to load dashboard data.');
             } finally {
@@ -314,16 +321,14 @@ function TakeQuizContent({ currentUser }) {
                 throw new Error('User not authenticated');
             }
 
-            const attemptCheckResponse = await axios.get(
-                `${API_BASE_URL}/check-quiz-attempt/${code}/${currentUser.id}`
-            );
+            const attemptCheckResponse = await getQuizAttempts(code, currentUser.id);
             if (attemptCheckResponse.data.hasAttempted) {
                 setError(attemptCheckResponse.data.message);
                 navigate(`/student-dashboard/quiz/${code}`);
                 return;
             }
 
-            const response = await axios.get(`${API_BASE_URL}/quizzes/${code}`);
+            const response = await getQuizByCode(code);
             setQuizData(response.data);
             setShowQuizCodeInput(false);
         } catch (err) {
@@ -356,11 +361,7 @@ function TakeQuizContent({ currentUser }) {
                 throw new Error('User not authenticated');
             }
 
-            const response = await axios.post(`${API_BASE_URL}/submit-quiz`, {
-                quiz_code: quizCode,
-                user_id: currentUser.id,
-                answers: selectedAnswers,
-            });
+            const response = await submitQuizAttempt(quizCode, currentUser.id, selectedAnswers);
 
             if (response.status === 201) {
                 navigate(`/student-dashboard/quiz/${quizCode}`);
@@ -468,7 +469,7 @@ function ResultsContent({ currentUser, setActiveTab }) {
             setLoading(true);
             setError('');
             try {
-                const response = await axios.get(`${API_BASE_URL}/quiz-result/${code}/${currentUser.id}`);
+                const response = await getQuizResult(code, currentUser.id);
                 if (response.status !== 200) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
@@ -498,7 +499,7 @@ function ResultsContent({ currentUser, setActiveTab }) {
         console.log('quizResult:', quizResult);
         if (quizResult?.quiz_id) {
             try {
-                const response = await axios.get(`${API_BASE_URL}/quizzes/id/${quizResult.quiz_id}`);
+                const response = await getQuizLeaderboard(quizResult.quiz_id);
                 if (response.data?.quiz_code) {
                     console.log('Navigating to leaderboard with quiz code:', response.data.quiz_code);
                     setActiveTab('leaderboard');
@@ -520,11 +521,7 @@ function ResultsContent({ currentUser, setActiveTab }) {
         setRetestLoading(true);
         setRetestMessage('');
         try {
-            const response = await axios.post(`${API_BASE_URL}/retest-requests`, {
-                student_id: currentUser.id,
-                quiz_id: quizResult.quiz_id,
-                attempt_id: attemptId
-            });
+            const response = await submitQuizAttempt(quizCode, currentUser.id, {}, attemptId);
 
             if (response.status === 201) {
                 setRetestMessage('Retest request submitted successfully');
@@ -644,7 +641,7 @@ function LeaderboardContent({ currentUser }) {
         setLoading(true);
         setError('');
         try {
-            const response = await axios.get(`${API_BASE_URL}/quiz-results/${code}/leaderboard`);
+            const response = await getQuizLeaderboard(code);
             if (response.status !== 200) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
@@ -771,11 +768,7 @@ function SettingsContent({ currentUser }) {
         setIsLoading(true);
         setMessage('');
         try {
-            const response = await axios.post('http://localhost:3000/change-password', {
-                ...formData,
-                username: currentUser.username,
-                userType: 'student',
-            });
+            const response = await changePassword(formData, 'student');
 
             if (response.status === 200) {
                 setMessage('Password changed successfully');
@@ -799,9 +792,7 @@ function SettingsContent({ currentUser }) {
         setIsLoading(true);
         setMessage('');
         try {
-            const response = await axios.put(`http://localhost:3000/api/students/${currentUser.id}`, {
-                ...profileData
-            });
+            const response = await updateUserProfile(currentUser.id, profileData);
 
             if (response.status === 200) {
                 setMessage('Profile updated successfully');

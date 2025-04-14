@@ -1,7 +1,7 @@
 // src/components/SignupForm.jsx
-import { useNavigate } from 'react-router-dom';
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
+import { signup } from '../services/api';
 import './SignupForm.css';
 
 function SignupForm() {
@@ -14,6 +14,7 @@ function SignupForm() {
     });
     const [isLoading, setIsLoading] = useState(false);
     const [showPopup, setShowPopup] = useState(false);
+    const [errorMessage, setErrorMessage] = useState('');
 
     useEffect(() => {
         if (showPopup) {
@@ -23,7 +24,7 @@ function SignupForm() {
             }, 2000);
             return () => clearTimeout(timer);
         }
-    }, [showPopup, navigate]);
+    }, [showPopup, navigate, formData.userType]);
 
     const handleInputChange = (e) => {
         const { id, value } = e.target;
@@ -33,15 +34,17 @@ function SignupForm() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setIsLoading(true);
+        setErrorMessage('');
 
         try {
-            const response = await axios.post('http://localhost:3000/signup', formData);
-            setShowPopup(true);
-            console.log('Signup successful:', response.data);
+            const data = await signup(formData);
+            if (data.success) {
+                setShowPopup(true);
+            } else {
+                setErrorMessage(data.error || 'Registration failed. Please try again.');
+            }
         } catch (error) {
-            const errorMessage =
-                error.response?.data?.error || 'Registration failed. Please try again.';
-            alert(errorMessage);
+            setErrorMessage('Registration failed. Please try again.');
             console.error('Signup error:', error);
         } finally {
             setIsLoading(false);
@@ -49,66 +52,61 @@ function SignupForm() {
     };
 
     return (
-        <div className="signup">
-            <div className="signup-content">
-                <h2>Join QuizSpark</h2>
-                <form className="signup-form" onSubmit={handleSubmit}>
+        <div className="signup-container">
+            <div className="signup-box">
+                <h2>Sign Up</h2>
+                <form onSubmit={handleSubmit}>
                     <div className="form-group">
+                        <label htmlFor="username">Username</label>
                         <input
                             type="text"
                             id="username"
                             value={formData.username}
                             onChange={handleInputChange}
                             required
-                            placeholder="Username"
-                            autoComplete="username"
                         />
                     </div>
                     <div className="form-group">
+                        <label htmlFor="email">Email</label>
                         <input
                             type="email"
                             id="email"
                             value={formData.email}
                             onChange={handleInputChange}
                             required
-                            placeholder="Email"
-                            autoComplete="email"
                         />
                     </div>
                     <div className="form-group">
+                        <label htmlFor="password">Password</label>
                         <input
                             type="password"
                             id="password"
                             value={formData.password}
                             onChange={handleInputChange}
                             required
-                            placeholder="Password"
-                            autoComplete="new-password"
                         />
                     </div>
-                    <div className="form-group select-group">
+                    <div className="form-group">
+                        <label htmlFor="userType">I am a:</label>
                         <select
                             id="userType"
                             value={formData.userType}
                             onChange={handleInputChange}
+                            required
                         >
                             <option value="student">Student</option>
                             <option value="teacher">Teacher</option>
                         </select>
-                        <span className="select-placeholder">I am a</span>
                     </div>
-                    <button
-                        type="submit"
-                        className="signup-button"
-                        disabled={isLoading}
-                    >
+                    {errorMessage && <div className="error-message">{errorMessage}</div>}
+                    <button type="submit" disabled={isLoading}>
                         {isLoading ? 'Creating Account...' : 'Sign Up'}
                     </button>
                 </form>
             </div>
             {showPopup && (
-                <div className="popup success">
-                    ✅ Account created successfully! Redirecting to login...
+                <div className="popup">
+                    <p>Account created successfully! Redirecting to login...</p>
                 </div>
             )}
         </div>

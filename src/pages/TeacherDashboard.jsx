@@ -1,6 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import axios from 'axios';
+import {
+    getRetestRequests,
+    getQuizzesByTeacher,
+    updateQuiz,
+    createQuiz,
+    updateRetestRequest,
+    changePassword,
+    updateUserProfile,
+    getQuizAttempts,
+    getQuizLeaderboard
+} from '../services/api';
 import './TeacherDashboard.css';
 import './MakeQuizzes.css';
 import { Bar } from 'react-chartjs-2';
@@ -42,8 +52,8 @@ function Sidebar({ activeTab, setActiveTab, currentUser }) {
         const fetchNotificationsCount = async () => {
             if (!currentUser?.id) return;
             try {
-                const response = await axios.get(`http://localhost:3000/api/retest-requests/teacher/${currentUser.id}`);
-                const unreadCount = response.data.filter(r => r.status === 'pending').length;
+                const data = await getRetestRequests(currentUser.id);
+                const unreadCount = data.filter(r => r.status === 'pending').length;
                 setNotificationsCount(unreadCount);
             } catch (error) {
                 console.error('Error fetching notifications count:', error);
@@ -126,24 +136,17 @@ function HomeContent({ currentUser, setActiveTab }) {
 
     useEffect(() => {
         const fetchCreatedQuizzes = async () => {
-            if (!currentUser?.id) return;
-
             setLoading(true);
             setError('');
             try {
-                const [quizzesResponse, notificationsResponse] = await Promise.all([
-                    axios.get(`http://localhost:3000/api/quizzes/created/${currentUser.id}`),
-                    axios.get(`http://localhost:3000/api/retest-requests/teacher/${currentUser.id}`)
+                const [quizzesData, notificationsData] = await Promise.all([
+                    getQuizzesByTeacher(currentUser.id),
+                    getRetestRequests(currentUser.id)
                 ]);
 
-                if (quizzesResponse.status === 200) {
-                    setQuizzes(quizzesResponse.data);
-                    setFilteredQuizzes(quizzesResponse.data);
-                } else {
-                    throw new Error('Failed to fetch quizzes');
-                }
-
-                const unreadCount = notificationsResponse.data.filter(r => r.status === 'pending').length;
+                setQuizzes(quizzesData);
+                setFilteredQuizzes(quizzesData);
+                const unreadCount = notificationsData.filter(r => r.status === 'pending').length;
                 setNotificationsCount(unreadCount);
             } catch (err) {
                 console.error('Error fetching data:', err);
@@ -208,29 +211,24 @@ function HomeContent({ currentUser, setActiveTab }) {
 
     const handleSaveChanges = async () => {
         try {
-            const response = await axios.put(`http://localhost:3000/api/quizzes/${selectedQuiz.quiz_id}`, {
+            await updateQuiz(selectedQuiz.quiz_id, {
                 quiz_name: editQuizData.quiz_name,
                 due_date: editQuizData.due_date,
                 questions: { questions: editQuizData.questions },
             });
-
-            if (response.status === 200) {
-                setMessage('Quiz updated successfully!');
-                setQuizzes(quizzes.map((q) =>
-                    q.quiz_id === selectedQuiz.quiz_id
-                        ? { ...q, quiz_name: editQuizData.quiz_name, due_date: editQuizData.due_date, questions: { questions: editQuizData.questions } }
-                        : q
-                ));
-                setFilteredQuizzes(filteredQuizzes.map((q) =>
-                    q.quiz_id === selectedQuiz.quiz_id
-                        ? { ...q, quiz_name: editQuizData.quiz_name, due_date: editQuizData.due_date, questions: { questions: editQuizData.questions } }
-                        : q
-                ));
-                setTimeout(() => setMessage(''), 3000);
-                setSelectedQuiz(null);
-            } else {
-                setMessage('Failed to update quiz.');
-            }
+            setMessage('Quiz updated successfully!');
+            setQuizzes(quizzes.map((q) =>
+                q.quiz_id === selectedQuiz.quiz_id
+                    ? { ...q, quiz_name: editQuizData.quiz_name, due_date: editQuizData.due_date, questions: { questions: editQuizData.questions } }
+                    : q
+            ));
+            setFilteredQuizzes(filteredQuizzes.map((q) =>
+                q.quiz_id === selectedQuiz.quiz_id
+                    ? { ...q, quiz_name: editQuizData.quiz_name, due_date: editQuizData.due_date, questions: { questions: editQuizData.questions } }
+                    : q
+            ));
+            setTimeout(() => setMessage(''), 3000);
+            setSelectedQuiz(null);
         } catch (error) {
             console.error('Error updating quiz:', error);
             setMessage('An error occurred while updating the quiz.');
@@ -461,8 +459,6 @@ function HomeContent({ currentUser, setActiveTab }) {
     );
 }
 
-// Other components (MakeQuizzesContent, ResultsContent, NotificationsContent, SettingsContent) remain unchanged
-
 function MakeQuizzesContent({ currentUser }) {
     const [quizName, setQuizName] = useState('');
     const [quizCode, setQuizCode] = useState('');
@@ -545,24 +541,14 @@ function MakeQuizzesContent({ currentUser }) {
         };
 
         try {
-            const response = await axios.post('http://localhost:3000/api/quizzes', quizData, {
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-            });
-
-            if (response.status === 201) {
-                alert(`Quiz created successfully! Quiz Code: ${generatedCode}`);
-                setQuizName('');
-                setDueDate('');
-                setQuestions([]);
-                resetForm();
-            } else {
-                const errorData = response.data;
-                alert(`Failed to create quiz: ${errorData.message || 'Unknown error'}`);
-            }
+            await createQuiz(quizData);
+            alert(`Quiz created successfully! Quiz Code: ${generatedCode}`);
+            setQuizName('');
+            setDueDate('');
+            setQuestions([]);
+            resetForm();
         } catch (error) {
-            console.error('Error submitting quiz:', error);
+            console.error('Error creating quiz:', error);
             alert('An error occurred while creating the quiz.');
         } finally {
             setIsLoading(false);
@@ -654,38 +640,19 @@ function MakeQuizzesContent({ currentUser }) {
 
 function ResultsContent({ currentUser, initialQuizCode }) {
     const [quizCode, setQuizCode] = useState(initialQuizCode || '');
-    const [attempts, setAttempts] = useState([]);
-    const [filteredAttempts, setFilteredAttempts] = useState([]);
-    const [error, setError] = useState('');
+    const [results, setResults] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [quizName, setQuizName] = useState('');
+    const [error, setError] = useState('');
     const [sortConfig, setSortConfig] = useState({ key: 'score', direction: 'desc' });
-
-    useEffect(() => {
-        if (initialQuizCode) {
-            fetchResults(initialQuizCode);
-        }
-    }, [initialQuizCode]);
 
     const fetchResults = async (code) => {
         setLoading(true);
         setError('');
-        setAttempts([]);
-        setFilteredAttempts([]);
-        setQuizName('');
-
         try {
-            const response = await axios.get(`http://localhost:3000/api/quiz-attempts/${code}`);
-            if (response.status === 200) {
-                setAttempts(response.data);
-                setFilteredAttempts(response.data);
-                setQuizName(response.data[0]?.quiz_name || 'Quiz Results');
-            } else {
-                setError(response.data.message || 'Failed to fetch attempts');
-            }
+            const data = await getQuizAttempts(code);
+            setResults(data);
         } catch (err) {
-            console.error('Error fetching quiz attempts:', err);
-            setError(err.response?.data?.message || 'An error occurred while fetching results');
+            setError('Failed to fetch quiz results');
         } finally {
             setLoading(false);
         }
@@ -704,7 +671,7 @@ function ResultsContent({ currentUser, initialQuizCode }) {
         const direction = sortConfig.key === key && sortConfig.direction === 'desc' ? 'asc' : 'desc';
         setSortConfig({ key, direction });
 
-        const sortedAttempts = [...filteredAttempts].sort((a, b) => {
+        const sortedResults = [...results].sort((a, b) => {
             if (key === 'student_username') {
                 return direction === 'asc'
                     ? a[key].localeCompare(b[key])
@@ -718,29 +685,29 @@ function ResultsContent({ currentUser, initialQuizCode }) {
             }
             return direction === 'asc' ? a[key] - b[key] : b[key] - a[key];
         });
-        setFilteredAttempts(sortedAttempts);
+        setResults(sortedResults);
     };
 
     const exportToCSV = () => {
         const headers = ['Student,Quiz Name,Score,Total Questions,Correct Answers,Attempt Date,Time Taken (s),Quiz Code,Student ID,Attempt ID'];
-        const rows = filteredAttempts.map(a =>
-            `${a.student_username},${quizName},${a.score},${a.total_questions},${a.correct_answers || 'N/A'},${new Date(a.attempt_date).toLocaleString()},${a.time_taken || 'N/A'},${a.quiz_code},${a.student_id},${a.attempt_id}`
+        const rows = results.map(a =>
+            `${a.student_username},${a.quiz_name},${a.score},${a.total_questions},${a.correct_answers || 'N/A'},${new Date(a.attempt_date).toLocaleString()},${a.time_taken || 'N/A'},${a.quiz_code},${a.student_id},${a.attempt_id}`
         );
         const csvContent = [headers, ...rows].join('\n');
         const blob = new Blob([csvContent], { type: 'text/csv' });
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `${quizName}_results.csv`;
+        link.download = `${a.quiz_name}_results.csv`;
         link.click();
     };
 
     const chartData = {
-        labels: filteredAttempts.map((attempt) => attempt.student_username.slice(0, 3).toUpperCase()),
+        labels: results.map((attempt) => attempt.student_username.slice(0, 3).toUpperCase()),
         datasets: [
             {
                 label: 'Score',
-                data: filteredAttempts.map((attempt) => attempt.score),
+                data: results.map((attempt) => attempt.score),
                 backgroundColor: 'rgba(79, 70, 229, 0.85)',
                 borderColor: 'rgba(79, 70, 229, 1)',
                 borderWidth: 1,
@@ -759,22 +726,22 @@ function ResultsContent({ currentUser, initialQuizCode }) {
         plugins: {
             legend: { display: false },
             tooltip: {
-                callbacks: { label: (context) => `${context.raw}/${filteredAttempts[0]?.total_questions}` },
+                callbacks: { label: (context) => `${context.raw}/${results[0]?.total_questions}` },
             },
         },
     };
 
-    const totalAttempts = filteredAttempts.length;
-    const avgScore = filteredAttempts.length > 0
-        ? (filteredAttempts.reduce((sum, a) => sum + a.score, 0) / (filteredAttempts.length * filteredAttempts[0].total_questions) * 100).toFixed(0)
+    const totalAttempts = results.length;
+    const avgScore = results.length > 0
+        ? (results.reduce((sum, a) => sum + a.score, 0) / (results.length * results[0].total_questions) * 100).toFixed(0)
         : 0;
-    const topScore = filteredAttempts.length > 0 ? Math.max(...filteredAttempts.map(a => a.score)) : 0;
+    const topScore = results.length > 0 ? Math.max(...results.map(a => a.score)) : 0;
 
     return (
         <div className="content results-content-alt">
             <div className="results-container-alt">
                 <div className="results-header-card-alt">
-                    <h2 className="results-title-alt">{quizName || 'Quiz Results'}</h2>
+                    <h2 className="results-title-alt">Quiz Results</h2>
                     <form onSubmit={handleQuizCodeSubmit} className="results-form-alt">
                         <div className="quiz-code-wrapper-alt">
                             <input
@@ -813,7 +780,7 @@ function ResultsContent({ currentUser, initialQuizCode }) {
                     </div>
                 )}
 
-                {!loading && !error && filteredAttempts.length === 0 && quizCode && (
+                {!loading && !error && results.length === 0 && quizCode && (
                     <div className="empty-state">
                         <span className="empty-icon">📊</span>
                         <h3 className="empty-title">No Results Found</h3>
@@ -821,7 +788,7 @@ function ResultsContent({ currentUser, initialQuizCode }) {
                     </div>
                 )}
 
-                {!loading && !error && filteredAttempts.length > 0 && (
+                {!loading && !error && results.length > 0 && (
                     <div className="results-body-alt">
                         <div className="stats-card-alt">
                             <h3 className="stats-title-alt">Performance Overview</h3>
@@ -888,7 +855,7 @@ function ResultsContent({ currentUser, initialQuizCode }) {
                                     </div>
                                 </div>
                                 <div className="table-body-alt">
-                                    {filteredAttempts.map((attempt) => (
+                                    {results.map((attempt) => (
                                         <div key={attempt.attempt_id} className="table-row-alt">
                                             <div className="table-cell-alt">
                                                 <div className="student-info-alt">
@@ -917,24 +884,17 @@ function ResultsContent({ currentUser, initialQuizCode }) {
 }
 
 function NotificationsContent({ currentUser }) {
-    const [notifications, setNotifications] = useState([]);
-    const [loading, setLoading] = useState(false);
+    const [requests, setRequests] = useState([]);
+    const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [teacherPassword, setTeacherPassword] = useState('');
-    const [message, setMessage] = useState('');
 
     useEffect(() => {
         const fetchNotifications = async () => {
-            if (!currentUser?.id) return;
-
-            setLoading(true);
-            setError('');
             try {
-                const response = await axios.get(`http://localhost:3000/api/retest-requests/teacher/${currentUser.id}`);
-                setNotifications(response.data);
-            } catch (error) {
-                console.error('Error fetching notifications:', error);
-                setError('Failed to load notifications. Please try again later.');
+                const data = await getRetestRequests(currentUser.id);
+                setRequests(data);
+            } catch (err) {
+                setError('Failed to fetch retest requests');
             } finally {
                 setLoading(false);
             }
@@ -944,37 +904,15 @@ function NotificationsContent({ currentUser }) {
     }, [currentUser]);
 
     const handleRetestAction = async (requestId, status) => {
-        if (!teacherPassword) {
-            setError('Please enter your password to approve or decline a request.');
-            return;
-        }
-
         try {
-            const response = await axios.put(`http://localhost:3000/api/retest-requests/${requestId}`, {
-                status,
-                teacher_password: teacherPassword,
-            });
-
-            if (response.status === 200) {
-                setNotifications(prevNotifications =>
-                    prevNotifications.map(notif => 
-                        notif.request_id === requestId ? { ...notif, status } : notif
-                    ).filter(n => n.status === 'pending')
-                );
-                setMessage(`Retest request ${status} successfully!`);
-                setTeacherPassword('');
-                setError('');
-                setTimeout(() => setMessage(''), 3000);
-            } else {
-                setError(response.response?.data?.error || 'Failed to update request. Check your password.');
-            }
+            await updateRetestRequest(requestId, status, currentUser.password);
+            setRequests(requests.filter(req => req.request_id !== requestId));
         } catch (error) {
-            console.error('Error updating retest request:', error);
-            setError(error.response?.data?.error || 'Failed to update request. Check your password.');
+            setError('Failed to update retest request');
         }
     };
 
-    const pendingCount = notifications.filter(n => n.status === 'pending').length;
+    const pendingCount = requests.filter(n => n.status === 'pending').length;
 
     return (
         <div className="content">
@@ -998,11 +936,7 @@ function NotificationsContent({ currentUser }) {
                 </div>
             )}
 
-            {message && (
-                <div className="message success">{message}</div>
-            )}
-
-            {!loading && !error && notifications.length === 0 && (
+            {!loading && !error && requests.length === 0 && (
                 <div className="empty-state">
                     <span className="empty-icon">📭</span>
                     <h3 className="empty-title">No Notifications</h3>
@@ -1010,9 +944,9 @@ function NotificationsContent({ currentUser }) {
                 </div>
             )}
 
-            {!loading && !error && notifications.length > 0 && (
+            {!loading && !error && requests.length > 0 && (
                 <div className="notifications-list">
-                    {notifications.filter(n => n.status === 'pending').map((notification) => (
+                    {requests.filter(n => n.status === 'pending').map((notification) => (
                         <div key={notification.request_id} className="notification-item">
                             <div className="notification-content">
                                 <div className="notification-header">
@@ -1033,27 +967,18 @@ function NotificationsContent({ currentUser }) {
                                     </div>
                                 </div>
                                 <div className="notification-actions">
-                                    <input
-                                        type="password"
-                                        placeholder="Enter your password"
-                                        value={teacherPassword}
-                                        onChange={(e) => setTeacherPassword(e.target.value)}
-                                        className="password-input"
-                                    />
-                                    <div className="action-buttons">
-                                        <button
-                                            onClick={() => handleRetestAction(notification.request_id, 'approved')}
-                                            className="approve-btn"
-                                        >
-                                            Approve
-                                        </button>
-                                        <button
-                                            onClick={() => handleRetestAction(notification.request_id, 'declined')}
-                                            className="decline-btn"
-                                        >
-                                            Decline
-                                        </button>
-                                    </div>
+                                    <button
+                                        onClick={() => handleRetestAction(notification.request_id, 'approved')}
+                                        className="approve-btn"
+                                    >
+                                        Approve
+                                    </button>
+                                    <button
+                                        onClick={() => handleRetestAction(notification.request_id, 'declined')}
+                                        className="decline-btn"
+                                    >
+                                        Decline
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -1065,77 +990,50 @@ function NotificationsContent({ currentUser }) {
 }
 
 function SettingsContent({ currentUser }) {
-    const navigate = useNavigate();
-    const [showPasswordFields, setShowPasswordFields] = useState(false);
-    const [showProfileFields, setShowProfileFields] = useState(false);
     const [formData, setFormData] = useState({
         currentPassword: '',
         newPassword: '',
+        confirmPassword: ''
     });
     const [profileData, setProfileData] = useState({
         email: currentUser?.email || '',
-        name: currentUser?.name || ''
+        name: currentUser?.username || ''
     });
     const [message, setMessage] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-    const [activeCard, setActiveCard] = useState(null);
-
-    const handleLogout = () => {
-        localStorage.removeItem('user');
-        navigate('/');
-    };
 
     const handlePasswordChange = async () => {
-        setIsLoading(true);
+        if (formData.newPassword !== formData.confirmPassword) {
+            setMessage('New passwords do not match');
+            return;
+        }
+
         setMessage('');
         try {
-            const response = await axios.post('http://localhost:3000/change-password', {
+            await changePassword({
                 ...formData,
                 username: currentUser.username,
-                userType: 'teacher',
+                userType: 'teacher'
             });
-
-            if (response.status === 200) {
-                setMessage('Password changed successfully');
-                setFormData({
-                    currentPassword: '',
-                    newPassword: '',
-                });
-                setShowPasswordFields(false);
-                setActiveCard(null);
-            } else {
-                setMessage(response.data.message || 'Failed to change password');
-            }
+            setMessage('Password updated successfully');
+            setFormData({
+                currentPassword: '',
+                newPassword: '',
+                confirmPassword: ''
+            });
         } catch (error) {
-            console.error('Error changing password:', error);
-            setMessage('An error occurred while changing the password');
-        } finally {
-            setIsLoading(false);
+            setMessage('Failed to update password');
         }
     };
 
     const handleProfileUpdate = async () => {
-        setIsLoading(true);
         setMessage('');
         try {
-            const response = await axios.put(`http://localhost:3000/api/teachers/${currentUser.id}`, {
-                ...profileData
-            });
-
-            if (response.status === 200) {
-                setMessage('Profile updated successfully');
-                const updatedUser = { ...currentUser, ...profileData };
-                localStorage.setItem('user', JSON.stringify(updatedUser));
-                setShowProfileFields(false);
-                setActiveCard(null);
-            } else {
-                setMessage(response.data.message || 'Failed to update profile');
-            }
+            await updateUserProfile(currentUser.id, profileData);
+            setMessage('Profile updated successfully');
+            const updatedUser = { ...currentUser, ...profileData };
+            localStorage.setItem('user', JSON.stringify(updatedUser));
         } catch (error) {
-            console.error('Error updating profile:', error);
-            setMessage('An error occurred while updating the profile');
-        } finally {
-            setIsLoading(false);
+            setMessage('Failed to update profile');
         }
     };
 
@@ -1291,6 +1189,17 @@ function SettingsContent({ currentUser }) {
                                     name="newPassword"
                                     placeholder="Enter your new password"
                                     value={formData.newPassword}
+                                    onChange={handleInputChange}
+                                    disabled={isLoading}
+                                />
+                            </div>
+                            <div className="input-group">
+                                <label>Confirm Password</label>
+                                <input
+                                    type="password"
+                                    name="confirmPassword"
+                                    placeholder="Enter your new password again"
+                                    value={formData.confirmPassword}
                                     onChange={handleInputChange}
                                     disabled={isLoading}
                                 />
