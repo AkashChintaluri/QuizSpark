@@ -63,7 +63,18 @@ jobs:
       - name: Deploy backend
         run: |
           # Get the EC2 instance ID
-          INSTANCE_ID=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=quizspark" --query "Reservations[0].Instances[0].InstanceId" --output text)
+          echo "Getting EC2 instance ID..."
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=quizspark" \
+            --query "Reservations[0].Instances[0].InstanceId" \
+            --output text)
+          
+          if [ -z "$INSTANCE_ID" ]; then
+            echo "Error: Could not find EC2 instance with tag Name=quizspark"
+            exit 1
+          fi
+          
+          echo "Found EC2 instance: $INSTANCE_ID"
           
           # Create a temporary directory for backend files
           mkdir -p backend_deploy
@@ -74,8 +85,9 @@ jobs:
           aws s3 sync backend_deploy/ s3://quizspark-frontend/server/ --delete --exclude "node_modules/*" --exclude ".git/*" --exclude "*.log"
           
           # Run deployment script on EC2
+          echo "Deploying to EC2 instance..."
           aws ssm send-command \
-            --instance-ids $INSTANCE_ID \
+            --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
             --parameters 'commands=["cd /home/ubuntu && aws s3 sync s3://quizspark-frontend/server/ server/ --exclude \"node_modules/*\" --exclude \".git/*\" --exclude \"*.log\" && cd server && npm install && pm2 restart all"]'
 
