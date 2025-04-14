@@ -28,21 +28,24 @@ data "aws_ami" "ubuntu" {
   owners = ["099720109477"] # Canonical
 }
 
-# Get default VPC
+# Get the current AWS account ID
+data "aws_caller_identity" "current" {}
+
+# Get the default VPC
 data "aws_vpc" "default" {
   default = true
 }
 
-# Get default subnet
+# Get the default subnet
 data "aws_subnet" "default" {
   vpc_id = data.aws_vpc.default.id
-  availability_zone = "${var.aws_region}a"
+  availability_zone = "${var.region}a"
 }
 
-# Reference existing security group
+# Get the default security group
 data "aws_security_group" "quizspark_sg" {
-  name   = "quizspark-sg"
   vpc_id = data.aws_vpc.default.id
+  name   = "default"
 }
 
 # IAM role for EC2 instance
