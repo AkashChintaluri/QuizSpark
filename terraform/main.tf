@@ -11,28 +11,43 @@ provider "aws" {
   region = var.aws_region
 }
 
+# Ubuntu AMI Data Source
+data "aws_ami" "ubuntu" {
+  most_recent = true
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+
+  owners = ["099720109477"] # Canonical
+}
+
 # VPC Configuration
 resource "aws_vpc" "quizspark_vpc" {
-  cidr_block           = "10.0.0.0/16"
+  cidr_block           = var.vpc_cidr
   enable_dns_hostnames = true
   enable_dns_support   = true
 
   tags = {
-    Name        = "quizspark-vpc"
-    Environment = var.environment
+    Name = "quizspark-vpc"
   }
 }
 
 # Public Subnet
 resource "aws_subnet" "public" {
   vpc_id                  = aws_vpc.quizspark_vpc.id
-  cidr_block              = "10.0.1.0/24"
+  cidr_block              = var.public_subnet_cidr
   availability_zone       = "${var.aws_region}a"
   map_public_ip_on_launch = true
 
   tags = {
-    Name        = "quizspark-public-subnet"
-    Environment = var.environment
+    Name = "quizspark-public-subnet"
   }
 }
 
@@ -41,8 +56,7 @@ resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.quizspark_vpc.id
 
   tags = {
-    Name        = "quizspark-igw"
-    Environment = var.environment
+    Name = "quizspark-igw"
   }
 }
 
@@ -56,11 +70,11 @@ resource "aws_route_table" "public" {
   }
 
   tags = {
-    Name        = "quizspark-public-rt"
-    Environment = var.environment
+    Name = "quizspark-public-rt"
   }
 }
 
+# Route Table Association
 resource "aws_route_table_association" "public" {
   subnet_id      = aws_subnet.public.id
   route_table_id = aws_route_table.public.id
@@ -104,40 +118,18 @@ resource "aws_security_group" "quizspark_sg" {
   }
 
   tags = {
-    Name        = "quizspark-sg"
-    Environment = var.environment
+    Name = "quizspark-sg"
   }
 }
 
 # EC2 Instance
-data "aws_ami" "ubuntu" {
-  most_recent = true
-
-  filter {
-    name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
-  }
-
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-
-  owners = ["099720109477"] # Canonical
-}
-
-resource "aws_instance" "quizspark_server" {
+resource "aws_instance" "quizspark" {
   ami           = data.aws_ami.ubuntu.id
   instance_type = var.instance_type
   subnet_id     = aws_subnet.public.id
   key_name      = var.key_name
 
   vpc_security_group_ids = [aws_security_group.quizspark_sg.id]
-
-  root_block_device {
-    volume_size = 20
-    volume_type = "gp3"
-  }
 
   user_data = <<-EOF
               #!/bin/bash
@@ -150,18 +142,20 @@ resource "aws_instance" "quizspark_server" {
               npm run build
               cd server
               npm install --production
+              # Update environment variables for Supabase
+              echo "SUPABASE_URL=${var.supabase_url}" >> .env
+              echo "SUPABASE_KEY=${var.supabase_key}" >> .env
               pm2 start pgServer.js --update-env
               EOF
 
   tags = {
-    Name        = "QuizSpark-Server"
-    Environment = var.environment
+    Name = "quizspark-server"
   }
 }
 
 # Outputs
 output "public_ip" {
-  value = aws_instance.quizspark_server.public_ip
+  value = aws_instance.quizspark.public_ip
 }
 
 output "vpc_id" {

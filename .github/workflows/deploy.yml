@@ -57,4 +57,20 @@ jobs:
       - name: Terraform Apply
         run: |
           cd terraform
-          terraform apply -auto-approve 
+          terraform apply -auto-approve
+          
+      - name: Deploy Backend
+        run: |
+          cd server
+          echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" > .env
+          echo "SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}" >> .env
+          echo "PORT=3000" >> .env
+          npm install
+          npm run build
+          pm2 start dist/pgServer.js --name "quizspark-backend"
+          
+      - name: Deploy Frontend
+        run: |
+          npm install
+          npm run build
+          aws s3 sync build/ s3://${{ secrets.S3_BUCKET_NAME }} --delete 

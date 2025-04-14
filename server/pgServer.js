@@ -1,6 +1,5 @@
 import express from 'express';
-import pkg from 'pg';
-const { Pool } = pkg;
+import { createClient } from '@supabase/supabase-js';
 import cors from 'cors';
 import dotenv from 'dotenv';
 
@@ -10,25 +9,22 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const pool = new Pool({
-    user: process.env.PG_USER,
-    host: process.env.PG_HOST,
-    database: process.env.PG_DB_NAME,
-    password: process.env.PG_PASSWORD,
-    port: process.env.PG_PORT
-});
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY
+);
 
 // Test the database connection
-pool.query('SELECT NOW()')
-    .then(res => {
-        console.log('Connected to database');
-        console.log('Current time:', res.rows[0].now);
-        startServer();
-    })
-    .catch(err => {
-        console.error('Error connecting to the database', err);
-        process.exit(1);
-    });
+supabase.from('student_login').select('count')
+  .then(() => {
+    console.log('Connected to Supabase');
+    startServer();
+  })
+  .catch(err => {
+    console.error('Error connecting to Supabase', err);
+    process.exit(1);
+  });
 
 function startServer() {
     app.post('/signup', async (req, res) => {
@@ -36,15 +32,17 @@ function startServer() {
         const table = userType === 'student' ? 'student_login' : 'teacher_login';
 
         try {
-            const query = `
-                INSERT INTO ${table} (username, email, password)
-                VALUES ($1, $2, $3)
-                RETURNING id
-            `;
-            const result = await pool.query(query, [username, email, password]);
+            const { data, error } = await supabase
+                .from(table)
+                .insert([{ username, email, password }])
+                .select()
+                .single();
+
+            if (error) throw error;
+
             res.status(201).json({
                 message: 'User registered successfully',
-                userId: result.rows[0].id
+                userId: data.id
             });
         } catch (error) {
             console.error('Signup error:', error);
@@ -57,18 +55,20 @@ function startServer() {
         const table = userType === 'student' ? 'student_login' : 'teacher_login';
 
         try {
-            const query = `
-                SELECT id, username, email 
-                FROM ${table} 
-                WHERE username = $1 AND password = $2
-            `;
-            const result = await pool.query(query, [username, password]);
+            const { data, error } = await supabase
+                .from(table)
+                .select('id, username, email')
+                .eq('username', username)
+                .eq('password', password)
+                .single();
 
-            if (result.rows.length > 0) {
+            if (error) throw error;
+
+            if (data) {
                 res.json({
                     success: true,
                     user: {
-                        ...result.rows[0],
+                        ...data,
                         userType
                     }
                 });
@@ -86,22 +86,26 @@ function startServer() {
         const table = userType === 'student' ? 'student_login' : 'teacher_login';
 
         try {
-            const verifyQuery = `
-                SELECT id FROM ${table} 
-                WHERE username = $1 AND password = $2
-            `;
-            const verifyResult = await pool.query(verifyQuery, [username, currentPassword]);
+            // Verify current password
+            const { data: verifyData, error: verifyError } = await supabase
+                .from(table)
+                .select('id')
+                .eq('username', username)
+                .eq('password', currentPassword)
+                .single();
 
-            if (verifyResult.rows.length === 0) {
+            if (verifyError || !verifyData) {
                 return res.status(401).json({ success: false, message: 'Invalid credentials' });
             }
 
-            const updateQuery = `
-                UPDATE ${table} 
-                SET password = $1 
-                WHERE username = $2
-            `;
-            await pool.query(updateQuery, [newPassword, username]);
+            // Update password
+            const { error: updateError } = await supabase
+                .from(table)
+                .update({ password: newPassword })
+                .eq('username', username);
+
+            if (updateError) throw updateError;
+
             res.json({ success: true, message: 'Password updated' });
         } catch (error) {
             console.error('Password change error:', error);
@@ -114,15 +118,16 @@ function startServer() {
         const table = userType === 'student' ? 'student_login' : 'teacher_login';
 
         try {
-            const query = `
-                SELECT id, username, email 
-                FROM ${table} 
-                WHERE id = $1
-            `;
-            const result = await pool.query(query, [userId]);
+            const { data, error } = await supabase
+                .from(table)
+                .select('id, username, email')
+                .eq('id', userId)
+                .single();
 
-            if (result.rows.length > 0) {
-                res.json({ ...result.rows[0], userType });
+            if (error) throw error;
+
+            if (data) {
+                res.json({ ...data, userType });
             } else {
                 res.status(404).json({ message: 'User not found' });
             }
@@ -140,14 +145,21 @@ function startServer() {
                 return res.status(400).json({ error: 'Invalid student_id: must be a number' });
             }
 
-            const query = `
-                SELECT t.id AS id, t.username, t.email
-                FROM teacher_login t
-                INNER JOIN subscriptions s ON t.id = s.teacher_id
-                WHERE s.student_id = $1;
-            `;
-            const result = await pool.query(query, [studentIdInt]);
-            res.json(result.rows);
+            const { data, error } = await supabase
+                .from('subscriptions')
+                .select(`
+                    teacher_id,
+                    teacher_login (
+                        id,
+                        username,
+                        email
+                    )
+                `)
+                .eq('student_id', studentIdInt);
+
+            if (error) throw error;
+
+            res.json(data.map(sub => sub.teacher_login));
         } catch (error) {
             console.error('Error fetching subscriptions:', error);
             res.status(500).json({ error: 'Failed to fetch subscriptions' });
@@ -158,18 +170,23 @@ function startServer() {
         const { quiz_name, quiz_code, created_by, questions, due_date } = req.body;
 
         try {
-            const query = `
-                INSERT INTO quizzes (quiz_name, quiz_code, created_by, questions, due_date)
-                VALUES ($1, $2, $3, $4::jsonb, $5)
-                RETURNING quiz_id;
-            `;
-            const values = [quiz_name, quiz_code, created_by, JSON.stringify({ questions }), due_date];
-            const result = await pool.query(query, values);
-            const quizId = result.rows[0].quiz_id;
+            const { data, error } = await supabase
+                .from('quizzes')
+                .insert([{
+                    quiz_name,
+                    quiz_code,
+                    created_by,
+                    questions: { questions },
+                    due_date
+                }])
+                .select()
+                .single();
+
+            if (error) throw error;
 
             res.status(201).json({
                 message: 'Quiz created successfully',
-                quizId: quizId
+                quizId: data.quiz_id
             });
         } catch (error) {
             console.error('Error creating quiz:', error);
@@ -182,16 +199,20 @@ function startServer() {
         const { quiz_name, due_date, questions } = req.body;
 
         try {
-            const query = `
-                UPDATE quizzes
-                SET quiz_name = $1, due_date = $2, questions = $3::jsonb
-                WHERE quiz_id = $4
-                RETURNING quiz_id;
-            `;
-            const values = [quiz_name, due_date, JSON.stringify(questions), quiz_id];
-            const result = await pool.query(query, values);
+            const { data, error } = await supabase
+                .from('quizzes')
+                .update({
+                    quiz_name,
+                    due_date,
+                    questions: { questions }
+                })
+                .eq('quiz_id', quiz_id)
+                .select()
+                .single();
 
-            if (result.rows.length === 0) {
+            if (error) throw error;
+
+            if (!data) {
                 return res.status(404).json({ message: 'Quiz not found' });
             }
 
@@ -206,22 +227,22 @@ function startServer() {
         const { quiz_code } = req.params;
 
         try {
-            const query = `
-                SELECT quiz_id, quiz_name, questions
-                FROM quizzes
-                WHERE quiz_code = $1;
-            `;
-            const result = await pool.query(query, [quiz_code]);
+            const { data, error } = await supabase
+                .from('quizzes')
+                .select('quiz_id, quiz_name, questions')
+                .eq('quiz_code', quiz_code)
+                .single();
 
-            if (result.rows.length === 0) {
+            if (error) throw error;
+
+            if (!data) {
                 return res.status(404).json({ message: 'Quiz not found' });
             }
 
-            const quiz = result.rows[0];
             res.status(200).json({
-                quiz_id: quiz.quiz_id,
-                quiz_name: quiz.quiz_name,
-                questions: quiz.questions
+                quiz_id: data.quiz_id,
+                quiz_name: data.quiz_name,
+                questions: data.questions
             });
         } catch (error) {
             console.error('Error fetching quiz:', error);
@@ -233,22 +254,22 @@ function startServer() {
         const { quiz_id } = req.params;
 
         try {
-            const query = `
-                SELECT quiz_id, quiz_code, quiz_name
-                FROM quizzes
-                WHERE quiz_id = $1;
-            `;
-            const result = await pool.query(query, [quiz_id]);
+            const { data, error } = await supabase
+                .from('quizzes')
+                .select('quiz_id, quiz_code, quiz_name')
+                .eq('quiz_id', quiz_id)
+                .single();
 
-            if (result.rows.length === 0) {
+            if (error) throw error;
+
+            if (!data) {
                 return res.status(404).json({ message: 'Quiz not found' });
             }
 
-            const quiz = result.rows[0];
             res.status(200).json({
-                quiz_id: quiz.quiz_id,
-                quiz_code: quiz.quiz_code,
-                quiz_name: quiz.quiz_name
+                quiz_id: data.quiz_id,
+                quiz_code: data.quiz_code,
+                quiz_name: data.quiz_name
             });
         } catch (error) {
             console.error('Error fetching quiz:', error);
@@ -264,12 +285,14 @@ function startServer() {
                 FROM quizzes
                 WHERE quiz_code = $1;
             `;
-            const quizResult = await pool.query(quizQuery, [quiz_code]);
-            if (quizResult.rows.length === 0) {
-                return res.status(404).json({ message: 'Quiz not found' });
-            }
+            const quizResult = await supabase
+                .from('quizzes')
+                .select('quiz_id, questions')
+                .eq('quiz_code', quiz_code)
+                .single();
+            if (quizResult.error) throw quizResult.error;
 
-            const quiz = quizResult.rows[0];
+            const quiz = quizResult.data;
             const questions = quiz.questions.questions;
 
             let score = 0;
@@ -289,9 +312,15 @@ function startServer() {
                 RETURNING attempt_id;
             `;
             const insertValues = [quiz.quiz_id, user_id, score, totalQuestions, JSON.stringify(answers)];
-            const insertResult = await pool.query(insertQuery, insertValues);
+            const { data: insertResult, error: insertError } = await supabase
+                .from('quiz_attempts')
+                .insert(insertValues)
+                .select()
+                .single();
 
-            const attemptId = insertResult.rows[0].attempt_id;
+            if (insertError) throw insertError;
+
+            const attemptId = insertResult.attempt_id;
 
             res.status(201).json({ attemptId, score, totalQuestions });
         } catch (error) {
@@ -312,13 +341,21 @@ function startServer() {
                 ORDER BY qa.attempt_date DESC
                 LIMIT 1;
             `;
-            const quizResult = await pool.query(quizQuery, [quiz_code, user_id]);
+            const quizResult = await supabase
+                .from('quiz_attempts')
+                .select('quiz_id, quiz_name, questions, attempt_id, answers, score, total_questions')
+                .eq('quiz_code', quiz_code)
+                .eq('user_id', user_id)
+                .order('attempt_date', { ascending: false })
+                .limit(1);
 
-            if (quizResult.rows.length === 0) {
+            if (quizResult.error) throw quizResult.error;
+
+            if (quizResult.data.length === 0) {
                 return res.status(404).json({ message: 'Quiz not found' });
             }
 
-            const quizData = quizResult.rows[0];
+            const quizData = quizResult.data[0];
             const questions = quizData.questions.questions;
 
             let userAnswers = {};
@@ -360,13 +397,18 @@ function startServer() {
 
         try {
             const quizQuery = 'SELECT quiz_id FROM quizzes WHERE quiz_code = $1';
-            const quizResult = await pool.query(quizQuery, [quizCode]);
+            const quizResult = await supabase
+                .from('quizzes')
+                .select('quiz_id')
+                .eq('quiz_code', quizCode);
 
-            if (quizResult.rows.length === 0) {
+            if (quizResult.error) throw quizResult.error;
+
+            if (quizResult.data.length === 0) {
                 return res.status(404).json({ message: 'Quiz not found' });
             }
 
-            const quizId = quizResult.rows[0].quiz_id;
+            const quizId = quizResult.data[0].quiz_id;
 
             const attemptQuery = `
                 SELECT qa.*, rr.status 
@@ -376,10 +418,18 @@ function startServer() {
                 ORDER BY qa.attempt_date DESC
                 LIMIT 1
             `;
-            const attemptResult = await pool.query(attemptQuery, [quizId, userId]);
+            const attemptResult = await supabase
+                .from('quiz_attempts')
+                .select('*')
+                .eq('quiz_id', quizId)
+                .eq('user_id', userId)
+                .order('attempt_date', { ascending: false })
+                .limit(1);
 
-            if (attemptResult.rows.length > 0) {
-                const latestAttempt = attemptResult.rows[0];
+            if (attemptResult.error) throw attemptResult.error;
+
+            if (attemptResult.data.length > 0) {
+                const latestAttempt = attemptResult.data[0];
                 const canRetake = latestAttempt.status === 'approved';
                 res.json({
                     hasAttempted: !canRetake,
@@ -406,8 +456,13 @@ function startServer() {
                 ORDER BY qa.attempt_date DESC
                 LIMIT 5;
             `;
-            const result = await pool.query(query, [user_id]);
-            res.json(result.rows);
+            const result = await supabase
+                .from('quiz_attempts')
+                .select('quiz_name, attempt_id, score, total_questions, attempt_date')
+                .eq('user_id', user_id)
+                .order('attempt_date', { ascending: false })
+                .limit(5);
+            res.json(result.data);
         } catch (error) {
             console.error('Error fetching recent results:', error);
             res.status(500).json({ message: 'Failed to fetch recent results' });
@@ -425,8 +480,11 @@ function startServer() {
                 FROM quiz_attempts
                 WHERE user_id = $1;
             `;
-            const result = await pool.query(query, [user_id]);
-            res.json(result.rows[0]);
+            const result = await supabase
+                .from('quiz_attempts')
+                .select('count(*) as total_attempts, AVG(CAST(score AS FLOAT) / total_questions * 100) as average_score, COUNT(DISTINCT quiz_id) as completed_quizzes')
+                .eq('user_id', user_id);
+            res.json(result.data[0]);
         } catch (error) {
             console.error('Error fetching user stats:', error);
             res.status(500).json({ message: 'Failed to fetch user stats' });
@@ -435,11 +493,10 @@ function startServer() {
 
     app.get('/api/teachers', async (req, res) => {
         try {
-            const result = await pool.query(`
-                SELECT id AS id, username, email 
-                FROM teacher_login
-            `);
-            res.json(result.rows);
+            const result = await supabase
+                .from('teacher_login')
+                .select('id AS id, username, email');
+            res.json(result.data);
         } catch (error) {
             console.error('Error fetching teachers:', error);
             res.status(500).json({ error: 'Failed to fetch teachers' });
@@ -449,11 +506,11 @@ function startServer() {
     app.post('/api/subscribe', async (req, res) => {
         const { student_id, teacher_id } = req.body;
         try {
-            await pool.query(`
-                INSERT INTO subscriptions (student_id, teacher_id)
-                VALUES ($1, $2)
-                ON CONFLICT (student_id, teacher_id) DO NOTHING
-            `, [student_id, teacher_id]);
+            await supabase
+                .from('subscriptions')
+                .insert([{ student_id, teacher_id }])
+                .onConflict('student_id, teacher_id')
+                .doNothing();
             res.json({ success: true });
         } catch (error) {
             console.error('Subscription error:', error);
@@ -464,10 +521,11 @@ function startServer() {
     app.post('/api/unsubscribe', async (req, res) => {
         const { student_id, teacher_id } = req.body;
         try {
-            await pool.query(`
-                DELETE FROM subscriptions 
-                WHERE student_id = $1 AND teacher_id = $2
-            `, [student_id, teacher_id]);
+            await supabase
+                .from('subscriptions')
+                .delete()
+                .eq('student_id', student_id)
+                .eq('teacher_id', teacher_id);
             res.json({ success: true });
         } catch (error) {
             console.error('Unsubscription error:', error);
@@ -496,8 +554,17 @@ function startServer() {
                 )
                 ORDER BY q.due_date ASC
             `;
-            const result = await pool.query(query, [student_id]);
-            res.json(result.rows);
+            const result = await supabase
+                .from('quizzes')
+                .select('*')
+                .join('teacher_login', 'quizzes.created_by', 'teacher_login.id')
+                .join('subscriptions', 'quizzes.created_by', 'subscriptions.teacher_id')
+                .eq('subscriptions.student_id', student_id)
+                .eq('quizzes.due_date', null)
+                .eq('quizzes.due_date', '>', supabase.from('CURRENT_TIMESTAMP').select('CURRENT_TIMESTAMP'))
+                .eq('quizzes.due_date', '>', supabase.from('CURRENT_TIMESTAMP').select('CURRENT_TIMESTAMP'))
+                .order('quizzes.due_date', { ascending: true });
+            res.json(result.data);
         } catch (error) {
             console.error('Error fetching quizzes:', error);
             res.status(500).json({ error: 'Failed to fetch quizzes' });
@@ -514,8 +581,11 @@ function startServer() {
                 JOIN teacher_login t ON q.created_by = t.id
                 WHERE qa.user_id = $1;
             `;
-            const result = await pool.query(query, [user_id]);
-            res.json(result.rows);
+            const result = await supabase
+                .from('quiz_attempts')
+                .select('DISTINCT quiz_id, quiz_name, quiz_code, teacher_login.username AS teacher_name, quizzes.due_date')
+                .eq('user_id', user_id);
+            res.json(result.data);
         } catch (error) {
             console.error('Error fetching attempted quizzes:', error);
             res.status(500).json({ message: 'Failed to fetch attempted quizzes' });
@@ -531,8 +601,12 @@ function startServer() {
                 WHERE created_by = $1
                 ORDER BY created_at DESC
             `;
-            const result = await pool.query(query, [user_id]);
-            res.json(result.rows);
+            const result = await supabase
+                .from('quizzes')
+                .select('quiz_id, quiz_name, quiz_code, questions, due_date, created_at')
+                .eq('created_by', user_id)
+                .order('created_at', { ascending: false });
+            res.json(result.data);
         } catch (error) {
             console.error('Error fetching created quizzes:', error);
             res.status(500).json({ error: 'Failed to fetch created quizzes' });
@@ -561,13 +635,19 @@ function startServer() {
                 WHERE q.quiz_code = $1
                 ORDER BY qa.attempt_date DESC;
             `;
-            const result = await pool.query(query, [quiz_code]);
+            const result = await supabase
+                .from('quiz_attempts')
+                .select('attempt_id, user_id, student_login.username AS student_username, score, total_questions, attempt_date, quizzes.quiz_name, retest_requests.request_id, retest_requests.status AS retest_status')
+                .eq('quiz_code', quiz_code)
+                .order('attempt_date', { ascending: false });
 
-            if (result.rows.length === 0) {
+            if (result.error) throw result.error;
+
+            if (result.data.length === 0) {
                 return res.status(404).json({ message: 'No attempts found for this quiz' });
             }
 
-            res.json(result.rows);
+            res.json(result.data);
         } catch (error) {
             console.error('Error fetching quiz attempts:', error);
             res.status(500).json({ error: 'Failed to fetch quiz attempts' });
@@ -585,14 +665,12 @@ function startServer() {
                 return res.status(400).json({ error: 'quiz_id is required' });
             }
 
-            const result = await pool.query(
-                `INSERT INTO retest_requests 
-                 (student_id, quiz_id, attempt_id) 
-                 VALUES ($1, $2, $3) 
-                 RETURNING *`,
-                [student_id, quiz_id, attempt_id]
-            );
-            res.status(201).json(result.rows[0]);
+            const result = await supabase
+                .from('retest_requests')
+                .insert([{ student_id, quiz_id, attempt_id }])
+                .select()
+                .single();
+            res.status(201).json(result.data);
         } catch (error) {
             console.error('Error creating retest request:', error);
             res.status(500).json({ error: 'Failed to create retest request' });
@@ -619,8 +697,12 @@ function startServer() {
                 WHERE q.created_by = $1
                 ORDER BY rr.request_date DESC
             `;
-            const result = await pool.query(query, [teacher_id]);
-            res.json(result.rows);
+            const result = await supabase
+                .from('retest_requests')
+                .select('request_id, student_id, student_login.username AS student_name, quiz_id, quizzes.quiz_name, quizzes.quiz_code, attempt_id, request_date, status')
+                .eq('teacher_id', teacher_id)
+                .order('request_date', { ascending: false });
+            res.json(result.data);
         } catch (error) {
             console.error('Error fetching retest requests:', error);
             res.status(500).json({ error: 'Failed to fetch retest requests' });
@@ -640,9 +722,12 @@ function startServer() {
             JOIN retest_requests rr ON q.quiz_id = rr.quiz_id
             WHERE rr.request_id = $1
         `;
-            const teacherResult = await pool.query(teacherQuery, [request_id]);
+            const teacherResult = await supabase
+                .from('teacher_login')
+                .select('password')
+                .eq('id', teacher_id);
 
-            if (teacherResult.rows.length === 0 || teacherResult.rows[0].password !== teacher_password) {
+            if (teacherResult.error || teacherResult.data.length === 0 || teacherResult.data[0].password !== teacher_password) {
                 return res.status(401).json({ error: 'Invalid teacher password' });
             }
 
@@ -654,28 +739,30 @@ function startServer() {
             WHERE request_id = $2
             RETURNING *
         `;
-            const result = await pool.query(updateQuery, [status, request_id]);
+            const result = await supabase
+                .from('retest_requests')
+                .update({ status, updated_at: supabase.from('CURRENT_TIMESTAMP').select('CURRENT_TIMESTAMP') })
+                .eq('request_id', request_id)
+                .select()
+                .single();
 
-            if (result.rows.length === 0) {
-                return res.status(404).json({ error: 'Retest request not found' });
-            }
+            if (result.error) throw result.error;
 
-            // If approved, delete the retest request and then the quiz attempt
-            if (status === 'approved') {
+            if (result.data.status === 'approved') {
                 // First, delete the retest request
-                await pool.query(`
-                DELETE FROM retest_requests 
-                WHERE request_id = $1
-            `, [request_id]);
+                await supabase
+                    .from('retest_requests')
+                    .delete()
+                    .eq('request_id', request_id);
 
                 // Then, delete the quiz attempt
-                await pool.query(`
-                DELETE FROM quiz_attempts 
-                WHERE attempt_id = $1
-            `, [result.rows[0].attempt_id]);
+                await supabase
+                    .from('quiz_attempts')
+                    .delete()
+                    .eq('attempt_id', result.data.attempt_id);
             }
 
-            res.json(result.rows[0]);
+            res.json(result.data);
         } catch (error) {
             console.error('Error updating retest request:', error);
             res.status(500).json({ error: 'Failed to update retest request' });
@@ -687,19 +774,20 @@ function startServer() {
             const { id } = req.params;
             const { email, name } = req.body;
 
-            const query = `
-                UPDATE teacher_login 
-                SET email = $1, username = $2
-                WHERE id = $3
-                RETURNING id, username, email
-            `;
-            const result = await pool.query(query, [email, name, id]);
+            const result = await supabase
+                .from('teacher_login')
+                .update({ email, username: name })
+                .eq('id', id)
+                .select()
+                .single();
 
-            if (result.rows.length === 0) {
+            if (result.error) throw result.error;
+
+            if (!result.data) {
                 return res.status(404).json({ message: 'Teacher not found' });
             }
 
-            res.json(result.rows[0]);
+            res.json(result.data);
         } catch (error) {
             console.error('Error updating teacher profile:', error);
             res.status(500).json({ message: 'Failed to update profile' });
@@ -711,19 +799,20 @@ function startServer() {
             const { id } = req.params;
             const { email, name } = req.body;
 
-            const query = `
-                UPDATE student_login 
-                SET email = $1, username = $2
-                WHERE id = $3
-                RETURNING id, username, email
-            `;
-            const result = await pool.query(query, [email, name, id]);
+            const result = await supabase
+                .from('student_login')
+                .update({ email, username: name })
+                .eq('id', id)
+                .select()
+                .single();
 
-            if (result.rows.length === 0) {
+            if (result.error) throw result.error;
+
+            if (!result.data) {
                 return res.status(404).json({ message: 'Student not found' });
             }
 
-            res.json(result.rows[0]);
+            res.json(result.data);
         } catch (error) {
             console.error('Error updating student profile:', error);
             res.status(500).json({ message: 'Failed to update profile' });
@@ -740,14 +829,20 @@ function startServer() {
                 FROM quizzes
                 WHERE quiz_code = $1;
             `;
-            const quizResult = await pool.query(quizQuery, [quiz_code]);
+            const quizResult = await supabase
+                .from('quizzes')
+                .select('quiz_id, quiz_name')
+                .eq('quiz_code', quiz_code)
+                .single();
 
-            if (quizResult.rows.length === 0) {
+            if (quizResult.error) throw quizResult.error;
+
+            if (!quizResult.data) {
                 return res.status(404).json({ message: 'Quiz not found' });
             }
 
-            const quizId = quizResult.rows[0].quiz_id;
-            const quizName = quizResult.rows[0].quiz_name;
+            const quizId = quizResult.data.quiz_id;
+            const quizName = quizResult.data.quiz_name;
 
             // Then get the leaderboard data with NULL handling
             const leaderboardQuery = `
@@ -770,16 +865,23 @@ function startServer() {
                 SELECT * FROM RankedResults
                 ORDER BY rank;
             `;
-            const leaderboardResult = await pool.query(leaderboardQuery, [quizId]);
+            const leaderboardResult = await supabase
+                .from('quiz_attempts')
+                .select('user_id, student_login.username AS student_name, score, total_questions, attempt_date')
+                .eq('quiz_id', quizId)
+                .order('score', { ascending: false })
+                .order('attempt_date', { ascending: true });
 
-            if (leaderboardResult.rows.length === 0) {
+            if (leaderboardResult.error) throw leaderboardResult.error;
+
+            if (leaderboardResult.data.length === 0) {
                 return res.status(404).json({ message: 'No attempts found for this quiz' });
             }
 
             // Format the data for the frontend
             const leaderboardData = {
                 quiz_name: quizName,
-                rankings: leaderboardResult.rows.map(row => ({
+                rankings: leaderboardResult.data.map(row => ({
                     student_id: row.user_id,
                     student_name: row.student_name,
                     score: Math.round((row.score / row.total_questions) * 100) || 0,
@@ -798,5 +900,7 @@ function startServer() {
     });
 
     const PORT = process.env.PORT || 3000;
-    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    app.listen(PORT, () => {
+        console.log(`Server is running on port ${PORT}`);
+    });
 }

@@ -4,6 +4,8 @@ body {
   padding: 0;
   background-color: #f0f4f8;
   color: #2d3748;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .header {
@@ -78,14 +80,62 @@ body {
 @media (max-width: 768px) {
   .header {
     padding: 10px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+  }
+
+  .nav {
+    padding: 0 1rem;
   }
 
   .title {
-    font-size: 24px;
+    font-size: 20px;
+  }
+
+  .buttons {
+    gap: 8px;
   }
 
   .button {
-    padding: 8px 15px;
+    padding: 6px 12px;
     font-size: 14px;
+  }
+
+  .hexagon-container {
+    display: none; /* Hide decorative elements on mobile */
+  }
+}
+
+/* Small mobile devices */
+@media (max-width: 480px) {
+  .header {
+    padding: 8px;
+  }
+
+  .nav {
+    padding: 0 0.5rem;
+  }
+
+  .title {
+    font-size: 18px;
+  }
+
+  .buttons {
+    gap: 4px;
+  }
+
+  .button {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+}
+
+/* Landscape mode adjustments */
+@media (max-height: 500px) and (orientation: landscape) {
+  .header {
+    position: relative;
   }
 }
