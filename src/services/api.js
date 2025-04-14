@@ -178,4 +178,10 @@ export const createRetestRequest = async (studentId, quizId, attemptId) => {
         body: JSON.stringify({ student_id: studentId, quiz_id: quizId, attempt_id: attemptId }),
     });
     return response.json();
+};
+
+// Leaderboard endpoint
+export const getQuizLeaderboard = async (quizCode) => {
+    const response = await fetch(`${API_BASE_URL}/api/quiz-leaderboard/${quizCode}`);
+    return response.json();
 }; 
