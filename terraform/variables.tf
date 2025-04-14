@@ -62,3 +62,12 @@ variable "public_subnet_cidr" {
     error_message = "The public_subnet_cidr must be a valid CIDR block."
   }
 }
+
+variable "frontend_bucket_name" {
+  description = "Name of the S3 bucket for frontend hosting"
+  type        = string
+  validation {
+    condition     = can(regex("^[a-z0-9][a-z0-9.-]*[a-z0-9]$", var.frontend_bucket_name))
+    error_message = "The bucket name must be lowercase, can contain periods and hyphens, and must start and end with a letter or number."
+  }
+}
