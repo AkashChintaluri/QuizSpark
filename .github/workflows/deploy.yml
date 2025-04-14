@@ -6,7 +6,7 @@ on:
 
 env:
   AWS_REGION: ap-south-1
-  S3_BUCKET: quizspark
+  S3_BUCKET: quizspark-frontend
   CLOUDFRONT_DISTRIBUTION_ID: E3QZQZQZQZQZQZ
 
 jobs:
