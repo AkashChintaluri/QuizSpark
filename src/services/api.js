@@ -184,4 +184,16 @@ export const createRetestRequest = async (studentId, quizId, attemptId) => {
 export const getQuizLeaderboard = async (quizCode) => {
     const response = await fetch(`${API_BASE_URL}/api/quiz-leaderboard/${quizCode}`);
     return response.json();
+};
+
+// User profile endpoints
+export const updateUserProfile = async (userId, userData) => {
+    const response = await fetch(`${API_BASE_URL}/api/user-profile/${userId}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(userData),
+    });
+    return response.json();
 }; 
