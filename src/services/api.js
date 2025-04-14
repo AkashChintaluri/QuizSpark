@@ -7,18 +7,36 @@ export const login = async (username, password, userType) => {
     try {
         // Get the user from the appropriate table based on userType
         const tableName = userType === 'student' ? 'student_login' : 'teacher_login';
-        const { data: user, error: userError } = await supabase
+        
+        // First check if the user exists
+        const { data: users, error: usersError } = await supabase
             .from(tableName)
             .select('*')
-            .eq('username', username)
-            .single();
+            .eq('username', username);
 
-        if (userError) throw userError;
-        if (!user) throw new Error('User not found');
+        if (usersError) {
+            console.error('Database query error:', usersError);
+            throw usersError;
+        }
+
+        if (!users || users.length === 0) {
+            console.error('No user found with username:', username);
+            throw new Error('User not found');
+        }
+
+        if (users.length > 1) {
+            console.error('Multiple users found with username:', username);
+            throw new Error('Invalid username');
+        }
+
+        const user = users[0];
 
         // Then sign in with email and password
         const { data, error } = await signIn(user.email, password);
-        if (error) throw error;
+        if (error) {
+            console.error('Supabase auth error:', error);
+            throw error;
+        }
 
         return {
             success: true,
@@ -32,7 +50,7 @@ export const login = async (username, password, userType) => {
         console.error('Login error:', error);
         return {
             success: false,
-            error: error.message
+            error: error.message || 'Login failed'
         };
     }
 };
