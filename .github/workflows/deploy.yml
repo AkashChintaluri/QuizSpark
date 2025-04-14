@@ -60,9 +60,27 @@ jobs:
           terraform init
           
       - name: Terraform Apply
+        id: terraform
         run: |
           cd terraform
           terraform apply -auto-approve
+          # Wait for a few seconds to ensure S3 configurations are propagated
+          sleep 10
+          
+      - name: Verify S3 Bucket
+        run: |
+          # Check if bucket exists and is accessible
+          aws s3api head-bucket --bucket quizspark-frontend --region ap-south-1
+          
+      - name: Build Frontend
+        run: |
+          npm ci
+          npm run build
+          
+      - name: Deploy Frontend to S3
+        run: |
+          aws s3 sync dist/ s3://quizspark-frontend --delete --region ap-south-1
+          echo "Frontend deployed to: http://quizspark-frontend.s3-website.ap-south-1.amazonaws.com"
           
       - name: Deploy Backend
         run: |
@@ -73,12 +91,6 @@ jobs:
           npm install
           sudo npm install -g pm2
           pm2 start pgServer.js --name "quizspark-backend"
-          
-      - name: Deploy Frontend
-        run: |
-          npm install
-          npm run build
-          aws s3 sync dist/ s3://${{ secrets.S3_BUCKET_NAME }} --delete
 
 
           
