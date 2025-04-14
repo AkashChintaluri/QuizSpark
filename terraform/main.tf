@@ -48,118 +48,52 @@ data "aws_security_group" "quizspark_sg" {
   name   = "default"
 }
 
-# IAM role for EC2 instance
-resource "aws_iam_role" "ec2_role" {
+# Get existing IAM role
+data "aws_iam_role" "ec2_role" {
   name = "quizspark_ec2_role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "ec2.amazonaws.com"
-        }
-      }
-    ]
-  })
 }
 
-# IAM policy for Systems Manager Parameter Store access
-resource "aws_iam_policy" "ssm_policy" {
+# Get existing IAM policies
+data "aws_iam_policy" "ssm_policy" {
   name = "quizspark_ssm_policy"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = [
-          "ssm:GetParameter",
-          "ssm:GetParameters"
-        ]
-        Effect   = "Allow"
-        Resource = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/quizspark/*"
-      }
-    ]
-  })
 }
 
-# IAM policy for S3 access
-resource "aws_iam_policy" "s3_policy" {
+data "aws_iam_policy" "s3_policy" {
   name = "quizspark_s3_policy"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = [
-          "s3:PutObject",
-          "s3:GetObject",
-          "s3:ListBucket",
-          "s3:DeleteObject"
-        ]
-        Effect   = "Allow"
-        Resource = [
-          "arn:aws:s3:::${var.frontend_bucket_name}",
-          "arn:aws:s3:::${var.frontend_bucket_name}/*"
-        ]
-      }
-    ]
-  })
 }
 
-# Attach policies to the role
-resource "aws_iam_role_policy_attachment" "ssm_attachment" {
-  role       = aws_iam_role.ec2_role.name
-  policy_arn = aws_iam_policy.ssm_policy.arn
-}
-
-resource "aws_iam_role_policy_attachment" "s3_attachment" {
-  role       = aws_iam_role.ec2_role.name
-  policy_arn = aws_iam_policy.s3_policy.arn
-}
-
-# Create instance profile
-resource "aws_iam_instance_profile" "ec2_profile" {
+# Get existing instance profile
+data "aws_iam_instance_profile" "ec2_profile" {
   name = "quizspark_ec2_profile"
-  role = aws_iam_role.ec2_role.name
 }
 
 # EC2 Instance
 resource "aws_instance" "quizspark" {
-  ami           = data.aws_ami.ubuntu.id
+  ami           = var.ami_id
   instance_type = var.instance_type
   subnet_id     = data.aws_subnet.default.id
   key_name      = var.key_name
-  iam_instance_profile = aws_iam_instance_profile.ec2_profile.name
+  iam_instance_profile = data.aws_iam_instance_profile.ec2_profile.name
 
   vpc_security_group_ids = [data.aws_security_group.quizspark_sg.id]
 
   user_data = <<-EOF
               #!/bin/bash
-              apt-get update -y
-              apt-get install -y nodejs npm git nginx
+              apt-get update
+              apt-get install -y nodejs npm
               npm install -g pm2
-              git clone ${var.repository_url} /app
-              cd /app
-              npm install --production
-              npm run build
-              cd server
-              npm install --production
-              # Update environment variables for Supabase
-              echo "SUPABASE_URL=${var.supabase_url}" >> .env
-              echo "SUPABASE_KEY=${var.supabase_key}" >> .env
-              echo "PORT=3000" >> .env
-              pm2 start pgServer.js --update-env
+              mkdir -p /home/ubuntu/server
+              cd /home/ubuntu/server
+              npm init -y
+              npm install express pg cors dotenv
               EOF
 
   tags = {
-    Name = "quizspark-server"
+    Name = "quizspark"
   }
 }
 
-# Outputs
+# Output the public IP of the EC2 instance
 output "public_ip" {
   value = aws_instance.quizspark.public_ip
 }
