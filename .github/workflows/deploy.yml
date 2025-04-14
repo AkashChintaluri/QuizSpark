@@ -59,8 +59,13 @@ jobs:
           # Get the EC2 instance ID
           INSTANCE_ID=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=quizspark" --query "Reservations[0].Instances[0].InstanceId" --output text)
           
-          # Copy backend files to EC2
-          aws s3 cp server/ s3://quizspark-frontend/server/ --recursive
+          # Create a temporary directory for backend files
+          mkdir -p backend_deploy
+          cp -r server/* backend_deploy/
+          rm -rf backend_deploy/node_modules
+          
+          # Copy only necessary backend files to S3
+          aws s3 sync backend_deploy/ s3://quizspark-frontend/server/ --delete
           
           # Run deployment script on EC2
           aws ssm send-command \
