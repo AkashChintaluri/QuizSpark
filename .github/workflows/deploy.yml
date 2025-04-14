@@ -37,6 +37,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -66,8 +71,8 @@ jobs:
           echo "SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}" >> .env
           echo "PORT=3000" >> .env
           npm install
-          npm run build
-          pm2 start dist/pgServer.js --name "quizspark-backend"
+          sudo npm install -g pm2
+          pm2 start pgServer.js --name "quizspark-backend"
           
       - name: Deploy Frontend
         run: |
