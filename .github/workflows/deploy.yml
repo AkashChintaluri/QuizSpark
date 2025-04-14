@@ -65,12 +65,12 @@ jobs:
           # Get the EC2 instance ID
           echo "Getting EC2 instance ID..."
           INSTANCE_ID=$(aws ec2 describe-instances \
-            --filters "Name=tag:Name,Values=quizspark" \
+            --filters "Name=tag:Name,Values=quizspark-server" \
             --query "Reservations[0].Instances[0].InstanceId" \
             --output text)
           
           if [ -z "$INSTANCE_ID" ]; then
-            echo "Error: Could not find EC2 instance with tag Name=quizspark"
+            echo "Error: Could not find EC2 instance with tag Name=quizspark-server"
             exit 1
           fi
           
