@@ -39,10 +39,47 @@ data "aws_subnet" "default" {
   availability_zone = "${var.aws_region}a"
 }
 
-# Get existing security group
-data "aws_security_group" "quizspark_sg" {
-  name = "quizspark-sg"
-  vpc_id = data.aws_vpc.default.id
+# Create security group
+resource "aws_security_group" "quizspark_sg" {
+  name        = "quizspark-sg"
+  description = "Security group for QuizSpark"
+  vpc_id      = data.aws_vpc.default.id
+
+  # Allow HTTP
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Allow Node.js server port
+  ingress {
+    from_port   = 3000
+    to_port     = 3000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Allow SSH
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Allow all outbound traffic
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "quizspark-sg"
+  }
 }
 
 # EC2 Instance
@@ -52,7 +89,7 @@ resource "aws_instance" "quizspark" {
   subnet_id     = data.aws_subnet.default.id
   key_name      = var.key_name
 
-  vpc_security_group_ids = [data.aws_security_group.quizspark_sg.id]
+  vpc_security_group_ids = [aws_security_group.quizspark_sg.id]
 
   user_data = <<-EOF
               #!/bin/bash
@@ -82,22 +119,14 @@ output "public_ip" {
   value = aws_instance.quizspark.public_ip
 }
 
-# S3 Bucket for Frontend
-resource "aws_s3_bucket" "frontend" {
+# Reference existing S3 bucket
+data "aws_s3_bucket" "frontend" {
   bucket = var.frontend_bucket_name
-}
-
-# Enable versioning for the bucket
-resource "aws_s3_bucket_versioning" "frontend" {
-  bucket = aws_s3_bucket.frontend.id
-  versioning_configuration {
-    status = "Enabled"
-  }
 }
 
 # Configure public access
 resource "aws_s3_bucket_public_access_block" "frontend" {
-  bucket = aws_s3_bucket.frontend.id
+  bucket = data.aws_s3_bucket.frontend.id
 
   block_public_acls       = false
   block_public_policy     = false
@@ -107,7 +136,7 @@ resource "aws_s3_bucket_public_access_block" "frontend" {
 
 # Add bucket policy for public read access
 resource "aws_s3_bucket_policy" "frontend" {
-  bucket = aws_s3_bucket.frontend.id
+  bucket = data.aws_s3_bucket.frontend.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -117,7 +146,7 @@ resource "aws_s3_bucket_policy" "frontend" {
         Effect    = "Allow"
         Principal = "*"
         Action    = "s3:GetObject"
-        Resource  = "${aws_s3_bucket.frontend.arn}/*"
+        Resource  = "${data.aws_s3_bucket.frontend.arn}/*"
       },
     ]
   })
@@ -125,7 +154,7 @@ resource "aws_s3_bucket_policy" "frontend" {
 
 # Configure for static website hosting
 resource "aws_s3_bucket_website_configuration" "frontend" {
-  bucket = aws_s3_bucket.frontend.id
+  bucket = data.aws_s3_bucket.frontend.id
 
   index_document {
     suffix = "index.html"
@@ -138,5 +167,5 @@ resource "aws_s3_bucket_website_configuration" "frontend" {
 
 # Output the website URL
 output "frontend_url" {
-  value = "http://${aws_s3_bucket.frontend.website_endpoint}"
+  value = "http://${aws_s3_bucket_website_configuration.frontend.website_endpoint}"
 }
