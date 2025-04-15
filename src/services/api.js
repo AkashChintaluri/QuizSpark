@@ -62,80 +62,30 @@ export const signup = async (userData) => {
             throw new Error('Password must be at least 6 characters long');
         }
 
-        const tableName = userData.userType === 'student' ? 'student_login' : 'teacher_login';
-        
-        // Check if username or email already exists
-        const { data: existingUser, error: checkError } = await supabase
-            .from(tableName)
-            .select('username, email')
-            .or(`username.eq.${userData.username},email.eq.${userData.email}`);
-
-        if (checkError) {
-            console.error('Error checking existing user:', checkError);
-            throw checkError;
-        }
-
-        if (existingUser && existingUser.length > 0) {
-            if (existingUser[0].username === userData.username) {
-                throw new Error('Username already exists');
-            }
-            if (existingUser[0].email === userData.email) {
-                throw new Error('Email already exists');
-            }
-        }
-
-        // Get the next available ID
-        const { data: maxId, error: maxIdError } = await supabase
-            .from(tableName)
-            .select('id')
-            .order('id', { ascending: false })
-            .limit(1);
-
-        if (maxIdError) {
-            console.error('Error getting max ID:', maxIdError);
-            throw maxIdError;
-        }
-
-        const nextId = (maxId && maxId.length > 0) ? maxId[0].id + 1 : 1;
-
-        // Create database record first
-        const { error: insertError } = await supabase
-            .from(tableName)
-            .insert([{
-                id: nextId,
+        // Call the server endpoint for signup
+        const response = await fetch(`${API_BASE_URL}/signup`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
                 username: userData.username,
                 email: userData.email,
-                password: userData.password
-            }]);
-
-        if (insertError) {
-            console.error('Error creating user record:', insertError);
-            throw insertError;
-        }
-
-        // Then create the auth user
-        const { data: authData, error: authError } = await supabase.auth.signUp({
-            email: userData.email,
-            password: userData.password,
-            options: {
-                data: {
-                    username: userData.username,
-                    userType: userData.userType
-                }
-            }
+                password: userData.password,
+                userType: userData.userType
+            }),
         });
 
-        if (authError) {
-            console.error('Auth signup error:', authError);
-            // Rollback the database insert
-            await supabase.from(tableName).delete().eq('id', nextId);
-            throw authError;
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Signup failed');
         }
 
         return {
             success: true,
             user: {
-                id: nextId,
+                id: data.userId,
                 username: userData.username,
                 email: userData.email,
                 userType: userData.userType
