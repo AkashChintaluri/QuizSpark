@@ -6,17 +6,19 @@ export default defineConfig({
   plugins: [react()],
   build: {
     outDir: 'dist',
-    sourcemap: false,
+    sourcemap: true,
     rollupOptions: {
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom', 'react-router-dom'],
+          supabase: ['@supabase/supabase-js'],
         },
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
         assetFileNames: (assetInfo) => {
-          if (assetInfo.name.endsWith('.css')) {
-            return 'assets/[name]-[hash][extname]';
-          }
-          return 'assets/[name]-[hash][extname]';
+          const info = assetInfo.name.split('.');
+          const ext = info[info.length - 1];
+          return `assets/[name]-[hash].${ext}`;
         },
       },
     },
@@ -25,9 +27,17 @@ export default defineConfig({
         localsConvention: 'camelCase',
       },
     },
+    chunkSizeWarningLimit: 1000,
+    emptyOutDir: true,
   },
   define: {
-    'process.env.VITE_SUPABASE_URL': JSON.stringify(process.env.VITE_SUPABASE_URL),
-    'process.env.VITE_SUPABASE_KEY': JSON.stringify(process.env.VITE_SUPABASE_KEY),
+    'process.env': {
+      VITE_SUPABASE_URL: JSON.stringify(process.env.VITE_SUPABASE_URL),
+      VITE_SUPABASE_KEY: JSON.stringify(process.env.VITE_SUPABASE_KEY),
+      SUPABASE_SERVICE_KEY: JSON.stringify(process.env.SUPABASE_SERVICE_KEY),
+    },
+  },
+  server: {
+    hmr: true,
   },
 });

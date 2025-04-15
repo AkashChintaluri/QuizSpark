@@ -49,34 +49,62 @@ jobs:
           
       - name: Deploy to S3
         run: |
-          # Upload CSS files with correct content type
-          aws s3 sync dist/ s3://quizspark-frontend \
-            --delete \
-            --region ap-south-1 \
-            --cache-control "public, max-age=31536000" \
-            --content-type "text/css" \
-            --exclude "*" \
-            --include "*.css"
+          # First, clean the S3 bucket to ensure no old files remain
+          aws s3 rm s3://quizspark-frontend --recursive --region ap-south-1
           
-          # Upload other static assets
+          # Upload all files with no caching to ensure immediate updates
           aws s3 sync dist/ s3://quizspark-frontend \
-            --delete \
             --region ap-south-1 \
-            --cache-control "public, max-age=31536000" \
-            --exclude "*.html" \
-            --exclude "*.json" \
-            --exclude "*.xml" \
-            --exclude "*.css"
-          
-          # Upload HTML files with no caching
-          aws s3 sync dist/ s3://quizspark-frontend \
-            --delete \
-            --region ap-south-1 \
-            --cache-control "no-cache" \
+            --cache-control "no-cache, no-store, must-revalidate" \
+            --content-type "text/html" \
             --exclude "*" \
-            --include "*.html" \
-            --include "*.json" \
-            --include "*.xml"
+            --include "*.html"
+          
+          # Upload CSS and JS with versioned filenames but no caching
+          aws s3 sync dist/ s3://quizspark-frontend \
+            --region ap-south-1 \
+            --cache-control "no-cache, no-store, must-revalidate" \
+            --exclude "*" \
+            --include "*.css" \
+            --include "*.js"
+          
+          # Upload other assets with versioned filenames but no caching
+          aws s3 sync dist/ s3://quizspark-frontend \
+            --region ap-south-1 \
+            --cache-control "no-cache, no-store, must-revalidate" \
+            --exclude "*" \
+            --include "*.png" \
+            --include "*.jpg" \
+            --include "*.jpeg" \
+            --include "*.gif" \
+            --include "*.svg" \
+            --include "*.woff" \
+            --include "*.woff2" \
+            --include "*.ttf" \
+            --include "*.eot"
+          
+          # Set bucket policy for public access
+          aws s3api put-bucket-policy \
+            --bucket quizspark-frontend \
+            --region ap-south-1 \
+            --policy '{
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "PublicReadGetObject",
+                  "Effect": "Allow",
+                  "Principal": "*",
+                  "Action": "s3:GetObject",
+                  "Resource": "arn:aws:s3:::quizspark-frontend/*"
+                }
+              ]
+            }'
+          
+          # Configure bucket for static website hosting
+          aws s3 website s3://quizspark-frontend \
+            --region ap-south-1 \
+            --index-document index.html \
+            --error-document index.html
           
           echo "Frontend deployed to: http://quizspark-frontend.s3-website.ap-south-1.amazonaws.com"
 
