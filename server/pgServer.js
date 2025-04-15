@@ -2,6 +2,7 @@ import express from 'express';
 import { createClient } from '@supabase/supabase-js';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import rateLimit from 'express-rate-limit';
 
 dotenv.config();
 
@@ -9,10 +10,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Initialize Supabase client
+// Initialize Supabase client with service role key
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY,
+  process.env.SUPABASE_SERVICE_KEY,
   {
     auth: {
       autoRefreshToken: false,
@@ -21,10 +22,52 @@ const supabase = createClient(
   }
 );
 
+// Middleware to verify JWT token
+const verifyToken = async (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (error) throw error;
+
+    req.user = user;
+    next();
+  } catch (error) {
+    console.error('Token verification error:', error);
+    res.status(401).json({ error: 'Invalid token' });
+  }
+};
+
+// Middleware to check user role
+const checkRole = (requiredRole) => async (req, res, next) => {
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser(req.headers.authorization?.split(' ')[1]);
+    if (error) throw error;
+
+    const { data: profile } = await supabase
+      .from(requiredRole === 'teacher' ? 'teacher_login' : 'student_login')
+      .select('id')
+      .eq('id', user.id)
+      .single();
+
+    if (!profile) {
+      return res.status(403).json({ error: 'Unauthorized role' });
+    }
+
+    next();
+  } catch (error) {
+    console.error('Role check error:', error);
+    res.status(403).json({ error: 'Role verification failed' });
+  }
+};
+
 // Test the database connection
 supabase.from('student_login').select('count')
   .then(() => {
-    console.log('Connected to Supabase');
+    console.log('Connected to Supabase with service role key');
     startServer();
   })
   .catch(err => {
@@ -33,14 +76,34 @@ supabase.from('student_login').select('count')
   });
 
 function startServer() {
+    // Signup endpoint
     app.post('/signup', async (req, res) => {
         const { username, email, password, userType } = req.body;
         const table = userType === 'student' ? 'student_login' : 'teacher_login';
 
         try {
+            // Create auth user
+            const { data: authData, error: authError } = await supabase.auth.signUp({
+                email,
+                password,
+                options: {
+                    data: {
+                        username,
+                        userType
+                    }
+                }
+            });
+
+            if (authError) throw authError;
+
+            // Create user profile
             const { data, error } = await supabase
                 .from(table)
-                .insert([{ username, email, password }])
+                .insert([{ 
+                    id: authData.user.id,
+                    username, 
+                    email 
+                }])
                 .select()
                 .single();
 
@@ -56,66 +119,64 @@ function startServer() {
         }
     });
 
+    // Login endpoint
     app.post('/login', async (req, res) => {
-        const { username, password, userType } = req.body;
-        const table = userType === 'student' ? 'student_login' : 'teacher_login';
+        const { email, password } = req.body;
 
         try {
-            const { data, error } = await supabase
-                .from(table)
-                .select('id, username, email')
-                .eq('username', username)
-                .eq('password', password)
-                .single();
+            const { data, error } = await supabase.auth.signInWithPassword({
+                email,
+                password
+            });
 
             if (error) throw error;
 
-            if (data) {
-                res.json({
-                    success: true,
-                    user: {
-                        ...data,
-                        userType
-                    }
-                });
-            } else {
-                res.status(401).json({ success: false, message: 'Invalid credentials' });
-            }
+            // Get user profile
+            const { data: profile, error: profileError } = await supabase
+                .from(data.user.user_metadata.userType === 'student' ? 'student_login' : 'teacher_login')
+                .select('*')
+                .eq('id', data.user.id)
+                .single();
+
+            if (profileError) throw profileError;
+
+            res.json({
+                success: true,
+                user: {
+                    ...data.user,
+                    ...profile
+                }
+            });
         } catch (error) {
             console.error('Login error:', error);
-            res.status(500).json({ error: 'Login failed' });
+            res.status(401).json({ error: 'Invalid credentials' });
         }
     });
 
-    app.post('/change-password', async (req, res) => {
-        const { username, currentPassword, newPassword, userType } = req.body;
-        const table = userType === 'student' ? 'student_login' : 'teacher_login';
+    // Change password endpoint
+    app.post('/change-password', verifyToken, async (req, res) => {
+        const { currentPassword, newPassword } = req.body;
 
         try {
             // Verify current password
-            const { data: verifyData, error: verifyError } = await supabase
-                .from(table)
-                .select('id')
-                .eq('username', username)
-                .eq('password', currentPassword)
-                .single();
+            const { error: verifyError } = await supabase.auth.signInWithPassword({
+                email: req.user.email,
+                password: currentPassword
+            });
 
-            if (verifyError || !verifyData) {
-                return res.status(401).json({ success: false, message: 'Invalid credentials' });
-            }
+            if (verifyError) throw verifyError;
 
             // Update password
-            const { error: updateError } = await supabase
-                .from(table)
-                .update({ password: newPassword })
-                .eq('username', username);
+            const { error: updateError } = await supabase.auth.updateUser({
+                password: newPassword
+            });
 
             if (updateError) throw updateError;
 
-            res.json({ success: true, message: 'Password updated' });
+            res.json({ success: true, message: 'Password updated successfully' });
         } catch (error) {
             console.error('Password change error:', error);
-            res.status(500).json({ success: false, error: 'Password update failed' });
+            res.status(401).json({ error: 'Password update failed' });
         }
     });
 
@@ -143,47 +204,69 @@ function startServer() {
         }
     });
 
-    app.get('/api/subscriptions/:student_id', async (req, res) => {
+    app.get('/api/subscriptions/:student_id', verifyToken, async (req, res) => {
         const { student_id } = req.params;
+
         try {
-            const studentIdInt = parseInt(student_id, 10);
-            if (isNaN(studentIdInt)) {
-                return res.status(400).json({ error: 'Invalid student_id: must be a number' });
+            // Check if user is authorized to view subscriptions
+            const isTeacher = req.user.user_metadata.userType === 'teacher';
+            const isStudent = req.user.id === student_id;
+
+            if (!isTeacher && !isStudent) {
+                return res.status(403).json({ error: 'Unauthorized to view subscriptions' });
             }
 
+            // Get subscriptions
             const { data, error } = await supabase
                 .from('subscriptions')
                 .select(`
                     teacher_id,
+                    subscribed_at,
                     teacher_login (
                         id,
                         username,
                         email
                     )
                 `)
-                .eq('student_id', studentIdInt);
+                .eq('student_id', student_id);
 
             if (error) throw error;
 
-            res.json(data.map(sub => sub.teacher_login));
+            res.json(data.map(sub => ({
+                teacher_id: sub.teacher_id,
+                subscribed_at: sub.subscribed_at,
+                ...sub.teacher_login
+            })));
         } catch (error) {
             console.error('Error fetching subscriptions:', error);
             res.status(500).json({ error: 'Failed to fetch subscriptions' });
         }
     });
 
-    app.post('/api/quizzes', async (req, res) => {
-        const { quiz_name, quiz_code, created_by, questions, due_date } = req.body;
+    app.post('/api/quizzes', verifyToken, checkRole('teacher'), async (req, res) => {
+        const { quiz_name, quiz_code, questions, due_date } = req.body;
 
         try {
+            // Check if quiz code already exists
+            const { data: existingQuiz } = await supabase
+                .from('quizzes')
+                .select('quiz_id')
+                .eq('quiz_code', quiz_code)
+                .single();
+
+            if (existingQuiz) {
+                return res.status(400).json({ error: 'Quiz code already exists' });
+            }
+
             const { data, error } = await supabase
                 .from('quizzes')
                 .insert([{
                     quiz_name,
                     quiz_code,
-                    created_by,
-                    questions: { questions },
-                    due_date
+                    created_by: req.user.id,
+                    questions,
+                    due_date,
+                    created_at: new Date()
                 }])
                 .select()
                 .single();
@@ -192,25 +275,37 @@ function startServer() {
 
             res.status(201).json({
                 message: 'Quiz created successfully',
-                quizId: data.quiz_id
+                quiz_id: data.quiz_id
             });
         } catch (error) {
             console.error('Error creating quiz:', error);
-            res.status(500).json({ message: 'Failed to create quiz', error: error.message });
+            res.status(500).json({ error: 'Failed to create quiz' });
         }
     });
 
-    app.put('/api/quizzes/:quiz_id', async (req, res) => {
+    app.put('/api/quizzes/:quiz_id', verifyToken, checkRole('teacher'), async (req, res) => {
         const { quiz_id } = req.params;
         const { quiz_name, due_date, questions } = req.body;
 
         try {
+            // Verify quiz ownership
+            const { data: existingQuiz, error: fetchError } = await supabase
+                .from('quizzes')
+                .select('created_by')
+                .eq('quiz_id', quiz_id)
+                .single();
+
+            if (fetchError) throw fetchError;
+            if (existingQuiz.created_by !== req.user.id) {
+                return res.status(403).json({ error: 'Unauthorized to update this quiz' });
+            }
+
             const { data, error } = await supabase
                 .from('quizzes')
                 .update({
                     quiz_name,
                     due_date,
-                    questions: { questions }
+                    questions
                 })
                 .eq('quiz_id', quiz_id)
                 .select()
@@ -218,41 +313,47 @@ function startServer() {
 
             if (error) throw error;
 
-            if (!data) {
-                return res.status(404).json({ message: 'Quiz not found' });
-            }
-
-            res.status(200).json({ message: 'Quiz updated successfully' });
+            res.json({ message: 'Quiz updated successfully' });
         } catch (error) {
             console.error('Error updating quiz:', error);
-            res.status(500).json({ message: 'Failed to update quiz', error: error.message });
+            res.status(500).json({ error: 'Failed to update quiz' });
         }
     });
 
-    app.get('/api/quizzes/:quiz_code', async (req, res) => {
+    app.get('/api/quizzes/:quiz_code', verifyToken, async (req, res) => {
         const { quiz_code } = req.params;
 
         try {
             const { data, error } = await supabase
                 .from('quizzes')
-                .select('quiz_id, quiz_name, questions')
+                .select('*')
                 .eq('quiz_code', quiz_code)
                 .single();
 
             if (error) throw error;
 
-            if (!data) {
-                return res.status(404).json({ message: 'Quiz not found' });
+            // Check permissions
+            const isTeacher = req.user.user_metadata.userType === 'teacher';
+            const isCreator = data.created_by === req.user.id;
+            
+            if (!isTeacher && !isCreator) {
+                // Check if student is subscribed to the teacher
+                const { data: subscription } = await supabase
+                    .from('subscriptions')
+                    .select('teacher_id')
+                    .eq('student_id', req.user.id)
+                    .eq('teacher_id', data.created_by)
+                    .single();
+
+                if (!subscription) {
+                    return res.status(403).json({ error: 'Unauthorized to view this quiz' });
+                }
             }
 
-            res.status(200).json({
-                quiz_id: data.quiz_id,
-                quiz_name: data.quiz_name,
-                questions: data.questions
-            });
+            res.json(data);
         } catch (error) {
             console.error('Error fetching quiz:', error);
-            res.status(500).json({ message: 'Failed to fetch quiz', error: error.message });
+            res.status(500).json({ error: 'Failed to fetch quiz' });
         }
     });
 
@@ -283,118 +384,138 @@ function startServer() {
         }
     });
 
-    app.post('/api/submit-quiz', async (req, res) => {
-        const { quiz_code, user_id, answers } = req.body;
+    // Rate limiting middleware
+    const quizAttemptLimiter = rateLimit({
+        windowMs: 15 * 60 * 1000, // 15 minutes
+        max: 5, // limit each IP to 5 requests per windowMs
+        message: 'Too many quiz attempts, please try again later'
+    });
+
+    // Quiz attempt endpoints
+    app.post('/api/submit-quiz', verifyToken, checkRole('student'), quizAttemptLimiter, async (req, res) => {
+        const { quiz_code, answers, time_taken } = req.body;
+
         try {
-            const quizQuery = `
-                SELECT quiz_id, questions
-                FROM quizzes
-                WHERE quiz_code = $1;
-            `;
-            const quizResult = await supabase
+            // Get quiz details
+            const { data: quiz, error: quizError } = await supabase
                 .from('quizzes')
-                .select('quiz_id, questions')
+                .select('*')
                 .eq('quiz_code', quiz_code)
                 .single();
-            if (quizResult.error) throw quizResult.error;
 
-            const quiz = quizResult.data;
-            const questions = quiz.questions.questions;
+            if (quizError) throw quizError;
 
+            // Check if student is subscribed to the teacher
+            const { data: subscription } = await supabase
+                .from('subscriptions')
+                .select('teacher_id')
+                .eq('student_id', req.user.id)
+                .eq('teacher_id', quiz.created_by)
+                .single();
+
+            if (!subscription) {
+                return res.status(403).json({ error: 'Unauthorized to attempt this quiz' });
+            }
+
+            // Check if quiz is still available
+            if (new Date(quiz.due_date) < new Date()) {
+                return res.status(400).json({ error: 'Quiz deadline has passed' });
+            }
+
+            // Check if student has already attempted
+            const { data: existingAttempt } = await supabase
+                .from('quiz_attempts')
+                .select('attempt_id')
+                .eq('quiz_id', quiz.quiz_id)
+                .eq('user_id', req.user.id)
+                .single();
+
+            if (existingAttempt) {
+                return res.status(400).json({ error: 'You have already attempted this quiz' });
+            }
+
+            // Calculate score
             let score = 0;
-            let totalQuestions = questions.length;
-
-            questions.forEach((question, index) => {
-                const correctAnswerIndex = question.options.findIndex(option => option.is_correct);
-                const userAnswer = parseInt(answers[index]);
-                if (correctAnswerIndex === userAnswer) {
+            const questions = quiz.questions;
+            answers.forEach((answer, index) => {
+                if (answer === questions[index].correct_answer) {
                     score++;
                 }
             });
 
-            const insertQuery = `
-                INSERT INTO quiz_attempts (quiz_id, user_id, score, total_questions, answers)
-                VALUES ($1, $2, $3, $4, $5)
-                RETURNING attempt_id;
-            `;
-            const insertValues = [quiz.quiz_id, user_id, score, totalQuestions, JSON.stringify(answers)];
-            const { data: insertResult, error: insertError } = await supabase
+            // Create attempt record
+            const { data: attempt, error: attemptError } = await supabase
                 .from('quiz_attempts')
-                .insert(insertValues)
+                .insert([{
+                    quiz_id: quiz.quiz_id,
+                    user_id: req.user.id,
+                    answers,
+                    score,
+                    total_questions: questions.length,
+                    time_taken,
+                    is_completed: true
+                }])
                 .select()
                 .single();
 
-            if (insertError) throw insertError;
+            if (attemptError) throw attemptError;
 
-            const attemptId = insertResult.attempt_id;
-
-            res.status(201).json({ attemptId, score, totalQuestions });
+            res.json({
+                success: true,
+                attempt_id: attempt.attempt_id,
+                score,
+                total_questions: questions.length
+            });
         } catch (error) {
             console.error('Error submitting quiz:', error);
-            res.status(500).json({ message: 'Failed to submit quiz', error: error.message });
+            res.status(500).json({ error: 'Failed to submit quiz' });
         }
     });
 
-    app.get('/api/quiz-result/:quiz_code/:user_id', async (req, res) => {
-        const { quiz_code, user_id } = req.params;
+    app.get('/api/quiz-result/:quiz_code', verifyToken, async (req, res) => {
+        const { quiz_code } = req.params;
 
         try {
-            const quizQuery = `
-                SELECT q.quiz_id, q.quiz_name, q.questions, qa.attempt_id, qa.answers, qa.score, qa.total_questions
-                FROM quizzes q
-                LEFT JOIN quiz_attempts qa ON q.quiz_id = qa.quiz_id AND qa.user_id = $2
-                WHERE q.quiz_code = $1
-                ORDER BY qa.attempt_date DESC
-                LIMIT 1;
-            `;
-            const quizResult = await supabase
-                .from('quiz_attempts')
-                .select('quiz_id, quiz_name, questions, attempt_id, answers, score, total_questions')
+            // Get quiz details
+            const { data: quiz, error: quizError } = await supabase
+                .from('quizzes')
+                .select('*')
                 .eq('quiz_code', quiz_code)
-                .eq('user_id', user_id)
-                .order('attempt_date', { ascending: false })
-                .limit(1);
+                .single();
 
-            if (quizResult.error) throw quizResult.error;
+            if (quizError) throw quizError;
 
-            if (quizResult.data.length === 0) {
-                return res.status(404).json({ message: 'Quiz not found' });
+            // Get attempt details
+            const { data: attempt, error: attemptError } = await supabase
+                .from('quiz_attempts')
+                .select('*')
+                .eq('quiz_id', quiz.id)
+                .eq('user_id', req.user.id)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
+
+            if (attemptError) throw attemptError;
+
+            // Check permissions
+            const isTeacher = req.user.user_metadata.userType === 'teacher';
+            const isCreator = quiz.created_by === req.user.id;
+            const isStudent = req.user.id === attempt.user_id;
+
+            if (!isTeacher && !isCreator && !isStudent) {
+                return res.status(403).json({ error: 'Unauthorized to view this result' });
             }
 
-            const quizData = quizResult.data[0];
-            const questions = quizData.questions.questions;
-
-            let userAnswers = {};
-            if (quizData.answers) {
-                userAnswers = typeof quizData.answers === 'string' ? JSON.parse(quizData.answers) : quizData.answers;
-            }
-
-            const quizResults = {
-                quiz_id: quizData.quiz_id,
-                quizName: quizData.quiz_name,
-                attemptId: quizData.attempt_id,
-                score: quizData.score || 0,
-                totalQuestions: quizData.total_questions || questions.length,
-                questions: questions.map((question, index) => {
-                    const correctAnswerIndex = question.options.findIndex(option => option.is_correct);
-                    const userAnswer = userAnswers[index];
-
-                    return {
-                        question_text: question.question_text,
-                        options: question.options.map((option, optionIndex) => ({
-                            ...option,
-                            isSelected: userAnswer == optionIndex,
-                            isCorrectAnswer: optionIndex == correctAnswerIndex,
-                        })),
-                    };
-                }),
-                userAnswers: userAnswers
-            };
-
-            res.json(quizResults);
+            res.json({
+                quiz_name: quiz.quiz_name,
+                score: attempt.score,
+                total_questions: attempt.total_questions,
+                answers: attempt.answers,
+                questions: quiz.questions
+            });
         } catch (error) {
             console.error('Error fetching quiz result:', error);
-            res.status(500).json({ message: 'Failed to fetch quiz result', error: error.message });
+            res.status(500).json({ error: 'Failed to fetch quiz result' });
         }
     });
 
@@ -509,33 +630,72 @@ function startServer() {
         }
     });
 
-    app.post('/api/subscribe', async (req, res) => {
-        const { student_id, teacher_id } = req.body;
+    app.post('/api/subscribe', verifyToken, checkRole('student'), async (req, res) => {
+        const { teacher_id } = req.body;
+
         try {
-            await supabase
+            // Verify teacher exists
+            const { data: teacher, error: teacherError } = await supabase
+                .from('teacher_login')
+                .select('id')
+                .eq('id', teacher_id)
+                .single();
+
+            if (teacherError) throw teacherError;
+
+            // Check for existing subscription
+            const { data: existingSubscription } = await supabase
                 .from('subscriptions')
-                .insert([{ student_id, teacher_id }])
-                .onConflict('student_id, teacher_id')
-                .doNothing();
-            res.json({ success: true });
+                .select('student_id, teacher_id')
+                .eq('student_id', req.user.id)
+                .eq('teacher_id', teacher_id)
+                .single();
+
+            if (existingSubscription) {
+                return res.status(400).json({ error: 'Already subscribed to this teacher' });
+            }
+
+            // Create subscription
+            const { data, error } = await supabase
+                .from('subscriptions')
+                .insert([{
+                    student_id: req.user.id,
+                    teacher_id,
+                    subscribed_at: new Date()
+                }])
+                .select()
+                .single();
+
+            if (error) throw error;
+
+            res.json({
+                success: true,
+                student_id: data.student_id,
+                teacher_id: data.teacher_id
+            });
         } catch (error) {
             console.error('Subscription error:', error);
-            res.status(500).json({ error: 'Subscription failed' });
+            res.status(500).json({ error: 'Failed to create subscription' });
         }
     });
 
-    app.post('/api/unsubscribe', async (req, res) => {
-        const { student_id, teacher_id } = req.body;
+    app.post('/api/unsubscribe', verifyToken, checkRole('student'), async (req, res) => {
+        const { teacher_id } = req.body;
+
         try {
-            await supabase
+            // Delete subscription
+            const { error } = await supabase
                 .from('subscriptions')
                 .delete()
-                .eq('student_id', student_id)
+                .eq('student_id', req.user.id)
                 .eq('teacher_id', teacher_id);
+
+            if (error) throw error;
+
             res.json({ success: true });
         } catch (error) {
             console.error('Unsubscription error:', error);
-            res.status(500).json({ error: 'Unsubscription failed' });
+            res.status(500).json({ error: 'Failed to remove subscription' });
         }
     });
 
@@ -660,115 +820,155 @@ function startServer() {
         }
     });
 
-    // Retest Requests Endpoints
-    app.post('/api/retest-requests', async (req, res) => {
+    // Retest request endpoints
+    app.post('/api/retest-requests', verifyToken, checkRole('student'), async (req, res) => {
+        const { quiz_id, attempt_id } = req.body;
+
         try {
-            console.log('Received retest request:', req.body);
-            const { student_id, quiz_id, attempt_id } = req.body;
-            
-            if (!quiz_id) {
-                console.error('Missing quiz_id in request');
-                return res.status(400).json({ error: 'quiz_id is required' });
+            // Verify quiz attempt exists and belongs to student
+            const { data: attempt, error: attemptError } = await supabase
+                .from('quiz_attempts')
+                .select('quiz_id, user_id')
+                .eq('attempt_id', attempt_id)
+                .single();
+
+            if (attemptError) throw attemptError;
+            if (attempt.user_id !== req.user.id) {
+                return res.status(403).json({ error: 'Unauthorized to request retest for this attempt' });
             }
 
-            const result = await supabase
+            // Check if quiz exists
+            const { data: quiz, error: quizError } = await supabase
+                .from('quizzes')
+                .select('created_by')
+                .eq('quiz_id', quiz_id)
+                .single();
+
+            if (quizError) throw quizError;
+
+            // Check if student is subscribed to the teacher
+            const { data: subscription } = await supabase
+                .from('subscriptions')
+                .select('teacher_id')
+                .eq('student_id', req.user.id)
+                .eq('teacher_id', quiz.created_by)
+                .single();
+
+            if (!subscription) {
+                return res.status(403).json({ error: 'Not subscribed to this teacher' });
+            }
+
+            // Check for existing retest request
+            const { data: existingRequest } = await supabase
                 .from('retest_requests')
-                .insert([{ student_id, quiz_id, attempt_id }])
+                .select('request_id')
+                .eq('attempt_id', attempt_id)
+                .single();
+
+            if (existingRequest) {
+                return res.status(400).json({ error: 'Retest request already exists' });
+            }
+
+            // Create retest request
+            const { data, error } = await supabase
+                .from('retest_requests')
+                .insert([{
+                    student_id: req.user.id,
+                    quiz_id,
+                    attempt_id,
+                    status: 'pending',
+                    request_date: new Date()
+                }])
                 .select()
                 .single();
-            res.status(201).json(result.data);
+
+            if (error) throw error;
+
+            res.status(201).json(data);
         } catch (error) {
             console.error('Error creating retest request:', error);
             res.status(500).json({ error: 'Failed to create retest request' });
         }
     });
 
-    app.get('/api/retest-requests/teacher/:teacher_id', async (req, res) => {
+    app.get('/api/retest-requests/teacher/:teacher_id', verifyToken, checkRole('teacher'), async (req, res) => {
+        const { teacher_id } = req.params;
+
         try {
-            const { teacher_id } = req.params;
-            const query = `
-                SELECT 
-                    rr.request_id,
-                    rr.student_id,
-                    sl.username AS student_name,
-                    q.quiz_id,
-                    q.quiz_name,
-                    q.quiz_code,
-                    rr.attempt_id,
-                    rr.request_date,
-                    rr.status
-                FROM retest_requests rr
-                JOIN student_login sl ON rr.student_id = sl.id
-                JOIN quizzes q ON rr.quiz_id = q.quiz_id
-                WHERE q.created_by = $1
-                ORDER BY rr.request_date DESC
-            `;
-            const result = await supabase
+            // Verify teacher
+            if (req.user.id !== teacher_id) {
+                return res.status(403).json({ error: 'Unauthorized to view these requests' });
+            }
+
+            // Get retest requests
+            const { data, error } = await supabase
                 .from('retest_requests')
-                .select('request_id, student_id, student_login.username AS student_name, quiz_id, quizzes.quiz_name, quizzes.quiz_code, attempt_id, request_date, status')
-                .eq('teacher_id', teacher_id)
+                .select(`
+                    request_id,
+                    student_id,
+                    quiz_id,
+                    attempt_id,
+                    status,
+                    request_date,
+                    updated_at,
+                    student_login (
+                        username,
+                        email
+                    ),
+                    quizzes (
+                        quiz_name,
+                        quiz_code
+                    )
+                `)
+                .eq('quizzes.created_by', teacher_id)
                 .order('request_date', { ascending: false });
-            res.json(result.data);
+
+            if (error) throw error;
+
+            res.json(data);
         } catch (error) {
             console.error('Error fetching retest requests:', error);
             res.status(500).json({ error: 'Failed to fetch retest requests' });
         }
     });
 
-    app.put('/api/retest-requests/:request_id', async (req, res) => {
+    app.put('/api/retest-requests/:request_id', verifyToken, checkRole('teacher'), async (req, res) => {
+        const { request_id } = req.params;
+        const { status } = req.body;
+
         try {
-            const { request_id } = req.params;
-            const { status, teacher_password } = req.body;
+            // Verify retest request exists and belongs to teacher
+            const { data: request, error: requestError } = await supabase
+                .from('retest_requests')
+                .select(`
+                    request_id,
+                    quiz_id,
+                    quizzes (
+                        created_by
+                    )
+                `)
+                .eq('request_id', request_id)
+                .single();
 
-            // Verify teacher password
-            const teacherQuery = `
-            SELECT t.password 
-            FROM quizzes q
-            JOIN teacher_login t ON q.created_by = t.id
-            JOIN retest_requests rr ON q.quiz_id = rr.quiz_id
-            WHERE rr.request_id = $1
-        `;
-            const teacherResult = await supabase
-                .from('teacher_login')
-                .select('password')
-                .eq('id', teacher_id);
-
-            if (teacherResult.error || teacherResult.data.length === 0 || teacherResult.data[0].password !== teacher_password) {
-                return res.status(401).json({ error: 'Invalid teacher password' });
+            if (requestError) throw requestError;
+            if (request.quizzes.created_by !== req.user.id) {
+                return res.status(403).json({ error: 'Unauthorized to update this request' });
             }
 
-            // Update retest request status
-            const updateQuery = `
-            UPDATE retest_requests 
-            SET status = $1,
-                updated_at = NOW()
-            WHERE request_id = $2
-            RETURNING *
-        `;
-            const result = await supabase
+            // Update retest request
+            const { data, error } = await supabase
                 .from('retest_requests')
-                .update({ status, updated_at: supabase.from('CURRENT_TIMESTAMP').select('CURRENT_TIMESTAMP') })
+                .update({ 
+                    status,
+                    updated_at: new Date()
+                })
                 .eq('request_id', request_id)
                 .select()
                 .single();
 
-            if (result.error) throw result.error;
+            if (error) throw error;
 
-            if (result.data.status === 'approved') {
-                // First, delete the retest request
-                await supabase
-                    .from('retest_requests')
-                    .delete()
-                    .eq('request_id', request_id);
-
-                // Then, delete the quiz attempt
-                await supabase
-                    .from('quiz_attempts')
-                    .delete()
-                    .eq('attempt_id', result.data.attempt_id);
-            }
-
-            res.json(result.data);
+            res.json(data);
         } catch (error) {
             console.error('Error updating retest request:', error);
             res.status(500).json({ error: 'Failed to update retest request' });
