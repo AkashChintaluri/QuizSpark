@@ -34,6 +34,13 @@ jobs:
           
       - name: Deploy to S3
         run: |
+          # Create bucket if it doesn't exist
+          aws s3api head-bucket --bucket ${{ secrets.S3_BUCKET_NAME }} 2>/dev/null || \
+          aws s3api create-bucket \
+            --bucket ${{ secrets.S3_BUCKET_NAME }} \
+            --region ap-south-1 \
+            --create-bucket-configuration LocationConstraint=ap-south-1
+          
           # Configure S3 bucket for static website hosting
           aws s3api put-bucket-website \
             --bucket ${{ secrets.S3_BUCKET_NAME }} \
