@@ -57,40 +57,36 @@ function SignupForm() {
                 <h2>Sign Up</h2>
                 <form className="signup-form" onSubmit={handleSubmit}>
                     <div className="form-group">
-                        <label htmlFor="username">Username</label>
                         <input
                             type="text"
                             id="username"
                             value={formData.username}
                             onChange={handleInputChange}
                             required
-                            placeholder="Enter your username"
+                            placeholder="Username"
                         />
                     </div>
                     <div className="form-group">
-                        <label htmlFor="email">Email</label>
                         <input
                             type="email"
                             id="email"
                             value={formData.email}
                             onChange={handleInputChange}
                             required
-                            placeholder="Enter your email"
+                            placeholder="Email"
                         />
                     </div>
                     <div className="form-group">
-                        <label htmlFor="password">Password</label>
                         <input
                             type="password"
                             id="password"
                             value={formData.password}
                             onChange={handleInputChange}
                             required
-                            placeholder="Enter your password"
+                            placeholder="Password"
                         />
                     </div>
                     <div className="form-group select-group">
-                        <span className="select-placeholder">I am a:</span>
                         <select
                             id="userType"
                             value={formData.userType}

@@ -21,7 +21,7 @@
 .signup-content h2 {
     font-size: 2.5rem;
     color: #4a4a4a;
-    margin-bottom: 1.5rem;
+    margin-bottom: 2rem;
     font-weight: 700;
     text-align: center;
 }
@@ -38,71 +38,70 @@
 
 .form-group input,
 .form-group select {
-    padding: 0.75rem;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    font-size: 1rem;
-    transition: all 0.3s ease-in-out;
     width: 100%;
+    padding: 1rem;
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    font-size: 1rem;
+    color: #4a4a4a;
+    background-color: white;
+    transition: all 0.3s ease;
 }
 
-.form-group input::placeholder,
-.select-placeholder {
-    color: #aaa; /* Subtle placeholder color */
-}
-
-.form-group input:hover,
-.form-group select:hover {
-    border-color: #667eea; /* Subtle hover effect */
+.form-group input::placeholder {
+    color: #9ca3af;
 }
 
 .form-group input:focus,
 .form-group select:focus {
     outline: none;
     border-color: #667eea;
-    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
 }
 
-/* Styling for the "I am a" dropdown */
-.select-group {
-    position: relative;
-}
-
-.select-placeholder {
-    position: absolute;
-    top: -1rem; /* Adjusted position */
-    left: 12px; /* Aligned with input padding */
-    background-color: white; /* Matches form background */
-    padding-left: 5px; /* Small padding for better readability */
-    padding-right: 5px; /* Matches left padding */
-    font-size: 0.9rem; /* Slightly smaller than input text */
-    color: #4a4a4a; /* Neutral color for label */
+/* Select styling */
+.select-group select {
+    appearance: none;
+    padding-right: 2.5rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234a4a4a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 1rem center;
+    background-size: 1em;
 }
 
 .signup-button {
     background-color: #667eea;
     color: white;
     border: none;
-    border-radius: 50px;
-    padding: 1rem 2rem;
-    font-size: 1.2rem;
-    font-weight: bold;
+    border-radius: 10px;
+    padding: 1rem;
+    font-size: 1.1rem;
+    font-weight: 600;
     cursor: pointer;
-    transition: all 0.25s ease-in-out;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
+    transition: all 0.3s ease;
     width: 100%;
+    margin-top: 1rem;
 }
 
 .signup-button:hover {
     background-color: #5a6edb;
-    transform: translateY(-3px);
-    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
 }
 
-/* Popup styling */
+.signup-button:disabled {
+    background-color: #a5b4fc;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.error-message {
+    color: #ef4444;
+    font-size: 0.875rem;
+    margin-top: -0.5rem;
+}
+
+/* Success popup */
 .popup.success {
     position: fixed;
     bottom: 20px;
@@ -110,7 +109,7 @@
     background-color: #48bb78;
     color: white;
     padding: 1rem 2rem;
-    border-radius: 8px;
+    border-radius: 10px;
     font-size: 1rem;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     animation: fadeIn 0.3s ease-out;
@@ -131,14 +130,21 @@
 @media (max-width: 768px) {
     .signup-content {
         padding: 2rem;
+        margin: 1rem;
     }
 
     .signup-content h2 {
         font-size: 2rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .form-group input,
+    .form-group select {
+        padding: 0.875rem;
     }
 
     .signup-button {
+        padding: 0.875rem;
         font-size: 1rem;
-        padding: 0.75rem 1.5rem;
     }
 }
