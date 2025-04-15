@@ -12,7 +12,8 @@ export const login = async (username, password, userType) => {
         const { data: users, error: userError } = await supabase
             .from(tableName)
             .select('*')
-            .eq('username', username);
+            .eq('username', username)
+            .eq('email', username); // Also try matching email
 
         if (userError) {
             console.error('Database query error:', userError);
@@ -56,13 +57,18 @@ export const login = async (username, password, userType) => {
 
 export const signup = async (userData) => {
     try {
+        // Validate password
+        if (!userData.password || userData.password.length < 6) {
+            throw new Error('Password must be at least 6 characters long');
+        }
+
         const tableName = userData.userType === 'student' ? 'student_login' : 'teacher_login';
         
-        // Check if username already exists
+        // Check if username or email already exists
         const { data: existingUser, error: checkError } = await supabase
             .from(tableName)
-            .select('username')
-            .eq('username', userData.username);
+            .select('username, email')
+            .or(`username.eq.${userData.username},email.eq.${userData.email}`);
 
         if (checkError) {
             console.error('Error checking existing user:', checkError);
@@ -70,10 +76,44 @@ export const signup = async (userData) => {
         }
 
         if (existingUser && existingUser.length > 0) {
-            throw new Error('Username already exists');
+            if (existingUser[0].username === userData.username) {
+                throw new Error('Username already exists');
+            }
+            if (existingUser[0].email === userData.email) {
+                throw new Error('Email already exists');
+            }
         }
 
-        // First create the auth user
+        // Get the next available ID
+        const { data: maxId, error: maxIdError } = await supabase
+            .from(tableName)
+            .select('id')
+            .order('id', { ascending: false })
+            .limit(1);
+
+        if (maxIdError) {
+            console.error('Error getting max ID:', maxIdError);
+            throw maxIdError;
+        }
+
+        const nextId = (maxId && maxId.length > 0) ? maxId[0].id + 1 : 1;
+
+        // Create database record first
+        const { error: insertError } = await supabase
+            .from(tableName)
+            .insert([{
+                id: nextId,
+                username: userData.username,
+                email: userData.email,
+                password: userData.password
+            }]);
+
+        if (insertError) {
+            console.error('Error creating user record:', insertError);
+            throw insertError;
+        }
+
+        // Then create the auth user
         const { data: authData, error: authError } = await supabase.auth.signUp({
             email: userData.email,
             password: userData.password,
@@ -87,33 +127,17 @@ export const signup = async (userData) => {
 
         if (authError) {
             console.error('Auth signup error:', authError);
+            // Rollback the database insert
+            await supabase.from(tableName).delete().eq('id', nextId);
             throw authError;
-        }
-
-        if (!authData?.user) {
-            throw new Error('Failed to create auth user');
-        }
-
-        // Then create the database record
-        const { error: insertError } = await supabase
-            .from(tableName)
-            .insert([{
-                id: authData.user.id,
-                username: userData.username,
-                email: userData.email,
-                password: userData.password
-            }]);
-
-        if (insertError) {
-            console.error('Error creating user record:', insertError);
-            throw insertError;
         }
 
         return {
             success: true,
             user: {
-                ...authData.user,
+                id: nextId,
                 username: userData.username,
+                email: userData.email,
                 userType: userData.userType
             }
         };
@@ -312,3 +336,5 @@ export const getQuizLeaderboard = async (quizCode) => {
     const response = await fetch(`${API_BASE_URL}/api/quiz-leaderboard/${quizCode}`);
     return response.json();
 }; 
+
+//test
