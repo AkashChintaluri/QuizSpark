@@ -59,7 +59,7 @@ function StudentLogin() {
                             value={formData.username}
                             onChange={handleInputChange}
                             required
-                            placeholder="Enter your username"
+                            placeholder="Username"
                         />
                     </div>
                     <div className="form-group">
@@ -69,7 +69,7 @@ function StudentLogin() {
                             value={formData.password}
                             onChange={handleInputChange}
                             required
-                            placeholder="Enter your password"
+                            placeholder="Password"
                         />
                     </div>
                     {errorMessage && <div className="error-message">{errorMessage}</div>}
