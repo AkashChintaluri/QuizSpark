@@ -16,23 +16,6 @@ function TeacherDashboard() {
     const navigate = useNavigate();
     const location = useLocation();
 
-    const fetchDashboardData = useCallback(async () => {
-        if (!currentUser?.id) return;
-        
-        try {
-            const [quizzesResponse, studentsResponse] = await Promise.all([
-                axios.get(`${API_URL}/api/teachers/${currentUser.id}/quizzes`),
-                axios.get(`${API_URL}/api/teachers/${currentUser.id}/students`)
-            ]);
-            
-            // Store the responses in state if needed
-            // For example:
-            // setQuizzes(quizzesResponse.data);
-            // setStudents(studentsResponse.data);
-        } catch (error) {
-            console.error('Error fetching dashboard data:', error);
-        }
-    }, [currentUser?.id]);
 
     useEffect(() => {
         const source = axios.CancelToken.source();
@@ -77,7 +60,7 @@ function Sidebar({ activeTab, setActiveTab, currentUser }) {
         const fetchNotificationsCount = async () => {
             try {
                 const _response = await axios.get(
-                    `${API_URL}/api/retest-requests/teacher/${currentUser.id}`,
+                    `${API_URL}/retest-requests/teacher/${currentUser.id}`,
                     { cancelToken: source.token }
                 );
                 const unreadCount = _response.data.filter(r => r.status === 'pending').length;
@@ -175,10 +158,10 @@ function HomeContent({ currentUser, setActiveTab }) {
             setError('');
             try {
                 const [_quizzesResponse, _notificationsResponse] = await Promise.all([
-                    axios.get(`${API_URL}/api/quizzes/created/${currentUser.id}`, {
+                    axios.get(`${API_URL}/quizzes/created/${currentUser.id}`, {
                         cancelToken: source.token
                     }),
-                    axios.get(`${API_URL}/api/retest-requests/teacher/${currentUser.id}`, {
+                    axios.get(`${API_URL}/retest-requests/teacher/${currentUser.id}`, {
                         cancelToken: source.token
                     })
                 ]);
@@ -257,7 +240,7 @@ function HomeContent({ currentUser, setActiveTab }) {
         const source = axios.CancelToken.source();
         try {
             const _response = await axios.put(
-                `${API_URL}/api/quizzes/${selectedQuiz.quiz_id}`,
+                `${API_URL}/quizzes/${selectedQuiz.quiz_id}`,
                 {
                     quiz_name: editQuizData.quiz_name,
                     due_date: editQuizData.due_date,
@@ -594,7 +577,7 @@ function MakeQuizzesContent({ currentUser }) {
         };
 
         try {
-            const _response = await axios.post(`${API_URL}/api/quizzes`, quizData, {
+            const _response = await axios.post(`${API_URL}/quizzes`, quizData, {
                 headers: {
                     'Content-Type': 'application/json',
                 },
@@ -723,7 +706,7 @@ function ResultsContent({ currentUser, initialQuizCode }) {
         setQuizName('');
 
         try {
-            const response = await axios.get(`${API_URL}/api/quiz-attempts/${code}`);
+            const response = await axios.get(`${API_URL}/quiz-attempts/${code}`);
 
             if (Array.isArray(response.data)) {
                 setAttempts(response.data);
@@ -981,7 +964,7 @@ function NotificationsContent({ currentUser }) {
             setError('');
             try {
                 const _response = await axios.get(
-                    `${API_URL}/api/retest-requests/teacher/${currentUser.id}`,
+                    `${API_URL}/retest-requests/teacher/${currentUser.id}`,
                     { cancelToken: source.token }
                 );
                 setNotifications(_response.data);
@@ -1010,7 +993,7 @@ function NotificationsContent({ currentUser }) {
         const source = axios.CancelToken.source();
         try {
             const _response = await axios.put(
-                `${API_URL}/api/retest-requests/${requestId}`,
+                `${API_URL}/retest-requests/${requestId}`,
                 {
                     status,
                     teacher_password: teacherPassword,
@@ -1179,7 +1162,7 @@ function SettingsContent({ currentUser }) {
         const source = axios.CancelToken.source();
 
         try {
-            const _response = await axios.put(`${API_URL}/api/teachers/${currentUser.id}`, {
+            const _response = await axios.put(`${API_URL}/profiles/teachers/${currentUser.id}`, {
                 email: profileData.email,
                 name: profileData.name
             }, { cancelToken: source.token });

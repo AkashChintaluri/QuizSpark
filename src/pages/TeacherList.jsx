@@ -27,8 +27,8 @@ function TeacherList() {
             }
 
             const [teachersResponse, subscriptionsResponse] = await Promise.all([
-                axios.get(`${API_URL}/api/teachers`),
-                axios.get(`${API_URL}/api/subscriptions/${studentId}`),
+                axios.get(`${API_URL}/profiles/teachers`),
+                axios.get(`${API_URL}/subscriptions/${studentId}`),
             ]);
 
             setTeachers(teachersResponse.data);
@@ -62,7 +62,7 @@ function TeacherList() {
             }
 
             const response = await axios.post(
-                `${API_URL}/api/subscribe`,
+                `${API_URL}/subscriptions/subscribe`,
                 {
                     student_id: studentId,
                     teacher_id: teacherId,
@@ -98,7 +98,7 @@ function TeacherList() {
                 throw new Error('Invalid user data');
             }
 
-            await axios.post(`${API_URL}/api/unsubscribe`, {
+            await axios.post(`${API_URL}/subscriptions/unsubscribe`, {
                 student_id: studentId,
                 teacher_id: teacherId,
             });

@@ -171,9 +171,9 @@ function HomeContent({ currentUser, setActiveTab }) {
                 }
 
                 const endpoints = [
-                    `${API_URL}/api/upcoming-quizzes/${currentUser.id}`,
-                    `${API_URL}/api/user-stats/${currentUser.id}`,
-                    `${API_URL}/api/attempted-quizzes/${currentUser.id}`,
+                    `${API_URL}/upcoming-quizzes/${currentUser.id}`,
+                    `${API_URL}/user-stats/${currentUser.id}`,
+                    `${API_URL}/attempted-quizzes/${currentUser.id}`,
                 ];
 
                 const [upcomingResponse, statsResponse, attemptedResponse] = await Promise.all(
@@ -317,7 +317,7 @@ function TakeQuizContent({ currentUser }) {
             }
 
             const attemptCheckResponse = await axios.get(
-                `${API_URL}/api/check-quiz-attempt/${code}/${currentUser.id}`
+                `${API_URL}/check-quiz-attempt/${code}/${currentUser.id}`
             );
             if (attemptCheckResponse.data.hasAttempted) {
                 setError(attemptCheckResponse.data.message);
@@ -325,7 +325,7 @@ function TakeQuizContent({ currentUser }) {
                 return;
             }
 
-            const response = await axios.get(`${API_URL}/api/quizzes/${code}`);
+            const response = await axios.get(`${API_URL}/quizzes/${code}`);
             setQuizData(response.data);
             setShowQuizCodeInput(false);
         } catch (err) {
@@ -369,7 +369,7 @@ function TakeQuizContent({ currentUser }) {
                 throw new Error('User not authenticated');
             }
 
-            const response = await axios.post(`${API_URL}/api/submit-quiz`, {
+            const response = await axios.post(`${API_URL}/submit-quiz`, {
                 quiz_code: quizCode,
                 user_id: currentUser.id,
                 answers: selectedAnswers,
@@ -481,7 +481,7 @@ function ResultsContent({ currentUser, setActiveTab }) {
             setLoading(true);
             setError('');
             try {
-                const response = await axios.get(`${API_URL}/api/quiz-result/${code}/${currentUser.id}`);
+                const response = await axios.get(`${API_URL}/quiz-result/${code}/${currentUser.id}`);
                 if (response.status !== 200) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
@@ -509,7 +509,7 @@ function ResultsContent({ currentUser, setActiveTab }) {
     const handleCheckLeaderboard = async () => {
         if (quizResult?.quiz_id) {
             try {
-                const response = await axios.get(`${API_URL}/api/quizzes/id/${quizResult.quiz_id}`);
+                const response = await axios.get(`${API_URL}/quizzes/id/${quizResult.quiz_id}`);
                 if (response.data?.quiz_code) {
                     setActiveTab('leaderboard');
                     navigate(`/student-dashboard/leaderboard/${response.data.quiz_code}`, {
@@ -526,7 +526,7 @@ function ResultsContent({ currentUser, setActiveTab }) {
         setRetestLoading(true);
         setRetestMessage('');
         try {
-            const response = await axios.post(`${API_URL}/api/retest-requests`, {
+            const response = await axios.post(`${API_URL}/retest-requests`, {
                 student_id: currentUser.id,
                 quiz_id: quizResult.quiz_id,
                 attempt_id: attemptId
@@ -650,7 +650,7 @@ function LeaderboardContent({ currentUser }) {
         setLoading(true);
         setError('');
         try {
-            const response = await axios.get(`${API_URL}/api/quiz-result/${code}/leaderboard`);
+            const response = await axios.get(`${API_URL}/quiz-result/${code}/leaderboard`);
             if (response.status !== 200) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
@@ -810,7 +810,7 @@ function SettingsContent({ currentUser }) {
         setIsLoading(true);
         setMessage('');
         try {
-            const response = await axios.put(`${API_URL}/api/students/${currentUser.id}`, {
+            const response = await axios.put(`${API_URL}/profiles/students/${currentUser.id}`, {
                 ...profileData
             });
 
