@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import './Login.css';
 
-const API_URL = '/api'; // Relative path for API requests
+const API_URL = 'https://quizspark-pi.vercel.app/api'; // Relative path for API requests
 
 function StudentLogin() {
     const navigate = useNavigate();

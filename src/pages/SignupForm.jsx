@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './SignupForm.css';
 
-const API_URL = '/api'; // Relative path for API requests
+const API_URL = 'https://quizspark-pi.vercel.app/api'; // Relative path for API requests
 
 function SignupForm() {
     const navigate = useNavigate();

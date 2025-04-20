@@ -8,7 +8,7 @@ import { Bar } from 'react-chartjs-2';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
-const API_URL = '/api'; // Relative path for API requests
+const API_URL = 'https://quizspark-pi.vercel.app/api'; // Relative path for API requests
 
 function TeacherDashboard() {
     const [activeTab, setActiveTab] = useState('home');
