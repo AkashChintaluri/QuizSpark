@@ -112,4 +112,4 @@ app.post('/change-password', async (req, res) => {
     }
 });
 
-module.exports = serverless(app);
+module.exports.handler = serverless(app);
