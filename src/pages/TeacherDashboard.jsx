@@ -8,7 +8,7 @@ import { Bar } from 'react-chartjs-2';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
-const API_URL = process.env.REACT_APP_API_URL;
+const API_URL = '/api'; // Relative path for API requests
 
 function TeacherDashboard() {
     const [activeTab, setActiveTab] = useState('home');

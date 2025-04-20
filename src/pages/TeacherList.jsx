@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import './TeacherList.css';
 
-const API_URL = process.env.REACT_APP_API_URL;
+const API_URL = '/api'; // Relative path for API requests
 
 function TeacherList() {
     const [teachers, setTeachers] = useState([]);

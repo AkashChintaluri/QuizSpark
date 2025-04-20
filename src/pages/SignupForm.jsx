@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './SignupForm.css';
 
-const API_URL = process.env.REACT_APP_API_URL;
+const API_URL = '/api'; // Relative path for API requests
 
 function SignupForm() {
     const navigate = useNavigate();
