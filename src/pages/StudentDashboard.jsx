@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     useNavigate,
     useParams,
@@ -8,10 +8,14 @@ import axios from 'axios';
 import './StudentDashboard.css';
 import './TakeQuiz.css';
 import TeacherList from './TeacherList';
+import { Line } from 'recharts';
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
 
-const API_BASE_URL = 'http://localhost:3000/api';
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
-function StudentDashboard() {
+const API_URL = 'http://localhost:3000';
+
+    function StudentDashboard() {
     const [activeTab, setActiveTab] = useState('home');
     const [currentUser, setCurrentUser] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -69,18 +73,18 @@ function StudentDashboard() {
         <div className="student-dashboard">
             {currentUser ? (
                 <>
-                    <Sidebar 
-                        activeTab={activeTab} 
-                        setActiveTab={setActiveTab} 
-                        currentUser={currentUser} 
-                        handleTabChange={handleTabChange} 
-                        navigate={navigate} 
+                    <Sidebar
+                        activeTab={activeTab}
+                        setActiveTab={setActiveTab}
+                        currentUser={currentUser}
+                        handleTabChange={handleTabChange}
+                        navigate={navigate}
                     />
-                    <Content 
-                        activeTab={activeTab} 
-                        setActiveTab={setActiveTab} 
-                        currentUser={currentUser} 
-                        location={location} 
+                    <Content
+                        activeTab={activeTab}
+                        setActiveTab={setActiveTab}
+                        currentUser={currentUser}
+                        location={location}
                     />
                 </>
             ) : (
@@ -150,7 +154,8 @@ function HomeContent({ currentUser, setActiveTab }) {
     const [stats, setStats] = useState({
         total_attempts: 0,
         average_score: 0,
-        completed_quizzes: 0,
+        highest_score: 0,
+        highest_quiz_name: 'None'
     });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -166,9 +171,9 @@ function HomeContent({ currentUser, setActiveTab }) {
                 }
 
                 const endpoints = [
-                    `${API_BASE_URL}/upcoming-quizzes/${currentUser.id}`,
-                    `${API_BASE_URL}/user-stats/${currentUser.id}`,
-                    `${API_BASE_URL}/attempted-quizzes/${currentUser.id}`,
+                    `${API_URL}/api/upcoming-quizzes/${currentUser.id}`,
+                    `${API_URL}/api/user-stats/${currentUser.id}`,
+                    `${API_URL}/api/attempted-quizzes/${currentUser.id}`,
                 ];
 
                 const [upcomingResponse, statsResponse, attemptedResponse] = await Promise.all(
@@ -176,10 +181,15 @@ function HomeContent({ currentUser, setActiveTab }) {
                 );
 
                 setUpcomingQuizzes(upcomingResponse.data);
-                setStats(statsResponse.data || { total_attempts: 0, average_score: 0, completed_quizzes: 0 });
+                setStats(statsResponse.data || {
+                    total_attempts: 0,
+                    average_score: 0,
+                    highest_score: 0,
+                    highest_quiz_name: 'None'
+                });
                 setAttemptedQuizzes(attemptedResponse.data);
             } catch (err) {
-                setError('Failed to load dashboard data.');
+                setError(err.message || 'Failed to load dashboard data.');
             } finally {
                 setLoading(false);
             }
@@ -212,10 +222,6 @@ function HomeContent({ currentUser, setActiveTab }) {
                 <div className="error-message">{error}</div>
             ) : (
                 <>
-                    <div className="dashboard-header">
-                        <h2>Welcome, {currentUser?.username}!</h2>
-                    </div>
-
                     <div className="stats-section">
                         <h3>Your Statistics</h3>
                         <div className="stats-grid">
@@ -228,8 +234,8 @@ function HomeContent({ currentUser, setActiveTab }) {
                                 <p>{(stats.average_score || 0).toFixed(1)}%</p>
                             </div>
                             <div className="stat-card">
-                                <h4>Completed Quizzes</h4>
-                                <p>{stats.completed_quizzes}</p>
+                                <h4>Highest Score</h4>
+                                <p>{stats.highest_score}% ({stats.highest_quiz_name})</p>
                             </div>
                         </div>
                     </div>
@@ -271,7 +277,14 @@ function HomeContent({ currentUser, setActiveTab }) {
                                         <h4>{quiz.quiz_name}</h4>
                                         <p>Code: {quiz.quiz_code}</p>
                                         <p>Teacher: {quiz.teacher_name}</p>
-                                        <p>Attempt Date: {new Date(quiz.attempt_date).toLocaleDateString()}</p>
+                                        <p>Attempt Date: {quiz.attempt_date ? new Date(quiz.attempt_date).toLocaleString('en-US', {
+                                            year: 'numeric',
+                                            month: 'short',
+                                            day: 'numeric',
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                            hour12: true
+                                        }) : 'N/A'}</p>
                                     </div>
                                 ))}
                             </div>
@@ -295,18 +308,7 @@ function TakeQuizContent({ currentUser }) {
     const { quizCode: urlQuizCode } = useParams();
     const navigate = useNavigate();
 
-    useEffect(() => {
-        if (urlQuizCode) {
-            setQuizCode(urlQuizCode);
-            setShowQuizCodeInput(false);
-            fetchQuiz(urlQuizCode);
-        } else {
-            setShowQuizCodeInput(true);
-            setQuizData(null);
-        }
-    }, [urlQuizCode, currentUser?.id]);
-
-    const fetchQuiz = async (code) => {
+    const fetchQuiz = useCallback(async (code) => {
         setError('');
         setLoading(true);
         try {
@@ -315,7 +317,7 @@ function TakeQuizContent({ currentUser }) {
             }
 
             const attemptCheckResponse = await axios.get(
-                `${API_BASE_URL}/check-quiz-attempt/${code}/${currentUser.id}`
+                `${API_URL}/api/check-quiz-attempt/${code}/${currentUser.id}`
             );
             if (attemptCheckResponse.data.hasAttempted) {
                 setError(attemptCheckResponse.data.message);
@@ -323,7 +325,7 @@ function TakeQuizContent({ currentUser }) {
                 return;
             }
 
-            const response = await axios.get(`${API_BASE_URL}/quizzes/${code}`);
+            const response = await axios.get(`${API_URL}/api/quizzes/${code}`);
             setQuizData(response.data);
             setShowQuizCodeInput(false);
         } catch (err) {
@@ -333,7 +335,18 @@ function TakeQuizContent({ currentUser }) {
         } finally {
             setLoading(false);
         }
-    };
+    }, [currentUser?.id, navigate, urlQuizCode]);
+
+    useEffect(() => {
+        if (urlQuizCode) {
+            setQuizCode(urlQuizCode);
+            setShowQuizCodeInput(false);
+            fetchQuiz(urlQuizCode);
+        } else {
+            setShowQuizCodeInput(true);
+            setQuizData(null);
+        }
+    }, [urlQuizCode, fetchQuiz]);
 
     const handleQuizCodeSubmit = async (e) => {
         e.preventDefault();
@@ -356,7 +369,7 @@ function TakeQuizContent({ currentUser }) {
                 throw new Error('User not authenticated');
             }
 
-            const response = await axios.post(`${API_BASE_URL}/submit-quiz`, {
+            const response = await axios.post(`${API_URL}/api/submit-quiz`, {
                 quiz_code: quizCode,
                 user_id: currentUser.id,
                 answers: selectedAnswers,
@@ -468,13 +481,13 @@ function ResultsContent({ currentUser, setActiveTab }) {
             setLoading(true);
             setError('');
             try {
-                const response = await axios.get(`${API_BASE_URL}/quiz-result/${code}/${currentUser.id}`);
+                const response = await axios.get(`${API_URL}/api/quiz-result/${code}/${currentUser.id}`);
                 if (response.status !== 200) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 setQuizResult(response.data);
             } catch (error) {
-                setError('An error occurred while fetching the quiz result.');
+                setError(error.response?.data?.message || 'An error occurred while fetching the quiz result.');
             } finally {
                 setLoading(false);
             }
@@ -494,25 +507,18 @@ function ResultsContent({ currentUser, setActiveTab }) {
     };
 
     const handleCheckLeaderboard = async () => {
-        console.log('Check Leaderboard button clicked');
-        console.log('quizResult:', quizResult);
         if (quizResult?.quiz_id) {
             try {
-                const response = await axios.get(`${API_BASE_URL}/quizzes/id/${quizResult.quiz_id}`);
+                const response = await axios.get(`${API_URL}/api/quizzes/id/${quizResult.quiz_id}`);
                 if (response.data?.quiz_code) {
-                    console.log('Navigating to leaderboard with quiz code:', response.data.quiz_code);
                     setActiveTab('leaderboard');
                     navigate(`/student-dashboard/leaderboard/${response.data.quiz_code}`, {
                         state: { activeTab: 'leaderboard' }
                     });
-                } else {
-                    console.log('No quiz code found in response');
                 }
             } catch (error) {
                 console.error('Error fetching quiz code:', error);
             }
-        } else {
-            console.log('No quiz_id found in quizResult');
         }
     };
 
@@ -520,7 +526,7 @@ function ResultsContent({ currentUser, setActiveTab }) {
         setRetestLoading(true);
         setRetestMessage('');
         try {
-            const response = await axios.post(`${API_BASE_URL}/retest-requests`, {
+            const response = await axios.post(`${API_URL}/api/retest-requests`, {
                 student_id: currentUser.id,
                 quiz_id: quizResult.quiz_id,
                 attempt_id: attemptId
@@ -644,7 +650,7 @@ function LeaderboardContent({ currentUser }) {
         setLoading(true);
         setError('');
         try {
-            const response = await axios.get(`${API_BASE_URL}/quiz-results/${code}/leaderboard`);
+            const response = await axios.get(`${API_URL}/api/quiz-results/${code}/leaderboard`);
             if (response.status !== 200) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
@@ -676,20 +682,19 @@ function LeaderboardContent({ currentUser }) {
                 </div>
 
                 {!urlQuizCode ? (
-                    <div className="leaderboard-search-container">
+                    <div className="quiz-container">
                         <form onSubmit={handleQuizCodeSubmit} className="leaderboard-search-form">
-                            <div className="search-input-wrapper">
-                                <input
-                                    type="text"
-                                    placeholder="Enter Quiz Code"
-                                    value={quizCode}
-                                    onChange={(e) => setQuizCode(e.target.value)}
-                                    className="quiz-code-input"
-                                />
-                                <button type="submit" className="view-leaderboard-btn" disabled={loading}>
-                                    {loading ? 'Loading...' : 'View Leaderboard'}
-                                </button>
-                            </div>
+                            <input
+                                type="text"
+                                placeholder="Enter Quiz Code"
+                                value={quizCode}
+                                onChange={(e) => setQuizCode(e.target.value)}
+                                className="quiz-code-input"
+                                disabled={loading}
+                            />
+                            <button type="submit" className="view-results-btn" disabled={loading}>
+                                {loading ? 'Loading...' : 'View Leaderboard'}
+                            </button>
                         </form>
                     </div>
                 ) : (
@@ -717,23 +722,29 @@ function LeaderboardContent({ currentUser }) {
                                 <div className="leaderboard-table-section">
                                     <table className="leaderboard-table">
                                         <thead>
-                                            <tr>
-                                                <th>Rank</th>
-                                                <th>Name</th>
-                                                <th>Score</th>
-                                            </tr>
+                                        <tr>
+                                            <th>Rank</th>
+                                            <th>Name</th>
+                                            <th>Score</th>
+                                        </tr>
                                         </thead>
                                         <tbody>
-                                            {filteredRankings.map((student) => (
-                                                <tr 
-                                                    key={student.student_id} 
-                                                    className={student.student_id === currentUser.id ? 'current-user' : ''}
-                                                >
-                                                    <td>{student.rank}</td>
-                                                    <td>{student.student_name}</td>
-                                                    <td>{student.score}%</td>
-                                                </tr>
-                                            ))}
+                                        {filteredRankings.map((student, index) => (
+                                            <tr
+                                                key={student.student_id}
+                                                className={
+                                                    student.student_id === currentUser.id
+                                                        ? 'current-user'
+                                                        : index % 2 === 0
+                                                        ? 'row-white'
+                                                        : 'row-purple'
+                                                }
+                                            >
+                                                <td>{student.rank}</td>
+                                                <td>{student.student_name}</td>
+                                                <td>{student.score}%</td>
+                                            </tr>
+                                        ))}
                                         </tbody>
                                     </table>
                                 </div>
@@ -771,7 +782,7 @@ function SettingsContent({ currentUser }) {
         setIsLoading(true);
         setMessage('');
         try {
-            const response = await axios.post('http://localhost:3000/change-password', {
+            const response = await axios.post(`${API_URL}/change-password`, {
                 ...formData,
                 username: currentUser.username,
                 userType: 'student',
@@ -789,7 +800,7 @@ function SettingsContent({ currentUser }) {
                 setMessage(response.data.message || 'Failed to change password');
             }
         } catch (error) {
-            setMessage('An error occurred while changing the password');
+            setMessage(error.response?.data?.message || 'An error occurred while changing the password');
         } finally {
             setIsLoading(false);
         }
@@ -799,7 +810,7 @@ function SettingsContent({ currentUser }) {
         setIsLoading(true);
         setMessage('');
         try {
-            const response = await axios.put(`http://localhost:3000/api/students/${currentUser.id}`, {
+            const response = await axios.put(`${API_URL}/api/students/${currentUser.id}`, {
                 ...profileData
             });
 
@@ -814,7 +825,7 @@ function SettingsContent({ currentUser }) {
             }
         } catch (error) {
             console.error('Error updating profile:', error);
-            setMessage('An error occurred while updating the profile');
+            setMessage(error.response?.data?.message || 'An error occurred while updating the profile');
         } finally {
             setIsLoading(false);
         }
@@ -863,10 +874,10 @@ function SettingsContent({ currentUser }) {
                 <div className="settings-header">
                     <h2>Settings & Preferences</h2>
                 </div>
-                
+
                 <div className="settings-grid">
                     {settingsCards.map((card) => (
-                        <div 
+                        <div
                             key={card.id}
                             className={`settings-card ${activeCard === card.id ? 'active' : ''}`}
                             style={{'--card-color': card.color}}
@@ -980,7 +991,7 @@ function SettingsContent({ currentUser }) {
                             >
                                 {isLoading ? 'Updating...' : 'Update Password'}
                             </button>
-                            {message && <div className="settings-message">{message}</div>}
+                            {message && <div className={message.includes('success') ? 'success-message' : 'error-message'}>{message}</div>}
                         </div>
                     </div>
                 )}

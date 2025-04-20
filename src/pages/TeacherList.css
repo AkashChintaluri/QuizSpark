@@ -2,9 +2,9 @@
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
 
 .teacher-list {
-    max-width: 800px;
-    margin: 1rem auto;
-    padding: 1rem;
+    width: 60%;
+    margin: 2rem auto;
+    padding: 1.5rem;
     background: linear-gradient(135deg, #edf2f7 0%, #ffffff 100%);
     border-radius: 12px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
@@ -14,25 +14,29 @@
     font-size: 1.8rem;
     font-weight: 700;
     color: #2d3748;
-    margin-bottom: 1rem;
+    margin-bottom: 1.5rem;
     text-align: center;
 }
 
 .teacher-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 1.5rem;
+    width: 100%;
+    justify-items: center;
 }
 
 .teacher-card {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1rem;
+    padding: 1.5rem;
     background: linear-gradient(90deg, #ffffff 0%, #f7fafc 100%);
-    border-radius: 10px;
+    border-radius: 12px;
     border: 1px solid #e2e8f0;
     transition: all 0.3s ease;
+    width: 100%;
+    max-width: 100%;
 }
 
 .teacher-card:hover {
@@ -253,5 +257,47 @@
 
     .dropdown-menu {
         padding: 0.75rem;
+    }
+}
+
+.success-message {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+    color: white;
+    padding: 1rem 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    animation: slideIn 0.3s ease-out, fadeOut 0.3s ease-in 2.7s forwards;
+    z-index: 1000;
+}
+
+.success-message::before {
+    content: "✓";
+    font-size: 1.2rem;
+    font-weight: bold;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0;
     }
 }

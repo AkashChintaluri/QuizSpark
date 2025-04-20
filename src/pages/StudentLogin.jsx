@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import './Login.css';
 
+const API_URL = 'http://localhost:3000';
+
 function StudentLogin() {
     const navigate = useNavigate();
     const [formData, setFormData] = useState({ username: '', password: '' });
@@ -22,7 +24,7 @@ function StudentLogin() {
 
     const handleInputChange = (e) => {
         const { id, value } = e.target;
-        setFormData(prev => ({ ...prev, [id]: value }));
+        setFormData((prev) => ({ ...prev, [id]: value }));
     };
 
     const handleSubmit = async (e) => {
@@ -31,9 +33,9 @@ function StudentLogin() {
         setErrorMessage('');
 
         try {
-            const response = await axios.post('http://localhost:3000/login', {
+            const response = await axios.post(`${API_URL}/login`, {
                 ...formData,
-                userType: 'student'
+                userType: 'student',
             });
 
             if (response.data.success) {
@@ -80,9 +82,7 @@ function StudentLogin() {
                             disabled={isLoading}
                         />
                     </div>
-
                     {errorMessage && <div className="error-message">{errorMessage}</div>}
-
                     <button
                         type="submit"
                         className="login-button"
@@ -92,7 +92,6 @@ function StudentLogin() {
                     </button>
                 </form>
             </div>
-
             {showPopup && (
                 <div className="popup success">
                     ✔️ Login successful! Redirecting to dashboard...

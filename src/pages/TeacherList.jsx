@@ -1,87 +1,138 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import './TeacherList.css';
 
-const API_BASE_URL = 'http://localhost:3000';
+const API_URL = 'http://localhost:3000';
 
-function TeacherList({ studentId }) {
+function TeacherList() {
     const [teachers, setTeachers] = useState([]);
+    const [subscriptions, setSubscriptions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [showDropdown, setShowDropdown] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
-    const [subscriptions, setSubscriptions] = useState(new Set());
 
-    useEffect(() => {
-        fetchTeachers();
-    }, [studentId]);
-
-    const fetchTeachers = async () => {
+    const fetchTeachers = useCallback(async () => {
+        setLoading(true);
+        setError('');
         try {
-            const [teachersRes, subsRes] = await Promise.all([
-                axios.get(`${API_BASE_URL}/api/teachers`),
-                axios.get(`${API_BASE_URL}/api/subscriptions/${studentId}`)
-            ]);
-            
-            if (Array.isArray(teachersRes.data)) {
-                setTeachers(teachersRes.data);
-            } else {
-                console.warn('Teachers response is not an array:', teachersRes.data);
-                setTeachers([]);
-                setError('Invalid teachers data received.');
+            const storedUser = localStorage.getItem('user');
+            if (!storedUser) {
+                throw new Error('Student not authenticated');
             }
 
-            if (Array.isArray(subsRes.data)) {
-                setSubscriptions(new Set(subsRes.data.map(sub => sub.id)));
-            } else {
-                console.warn('Subscriptions response is not an array:', subsRes.data);
-                setSubscriptions(new Set());
-                setError(subsRes.data?.error || 'Invalid subscriptions data received.');
+            const studentId = JSON.parse(storedUser)?.id;
+            if (!studentId) {
+                throw new Error('Invalid user data');
             }
+
+            const [teachersResponse, subscriptionsResponse] = await Promise.all([
+                axios.get(`${API_URL}/api/teachers`),
+                axios.get(`${API_URL}/api/subscriptions/${studentId}`),
+            ]);
+
+            setTeachers(teachersResponse.data);
+            setSubscriptions(subscriptionsResponse.data);
         } catch (err) {
-            console.error('Error fetching data:', err);
-            setError(err.response?.data?.error || 'Failed to fetch teacher data.');
+            console.error('Error fetching teachers:', err);
+            setError(err.message || 'Failed to fetch teachers');
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
+
+    useEffect(() => {
+        fetchTeachers();
+    }, [fetchTeachers]);
 
     const handleSubscribe = async (teacherId) => {
         try {
-            await axios.post(`${API_BASE_URL}/api/subscribe`, {
-                student_id: studentId,
-                teacher_id: teacherId
-            });
-            fetchTeachers();
+            const storedUser = localStorage.getItem('user');
+            if (!storedUser) {
+                throw new Error('Student not authenticated');
+            }
+
+            const studentId = JSON.parse(storedUser)?.id;
+            if (!studentId) {
+                throw new Error('Invalid user data');
+            }
+
+            if (!teacherId) {
+                throw new Error('Invalid teacher ID');
+            }
+
+            const response = await axios.post(
+                `${API_URL}/api/subscribe`,
+                {
+                    student_id: studentId,
+                    teacher_id: teacherId,
+                },
+                {
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                }
+            );
+
+            if (response.data.success) {
+                setError('');
+                await fetchTeachers();
+            } else {
+                throw new Error(response.data.error || 'Subscription failed');
+            }
         } catch (err) {
-            setError('Failed to subscribe to teacher');
+            console.error('Error subscribing to teacher:', err);
+            setError(err.response?.data?.error || err.message || 'Failed to subscribe to teacher');
         }
     };
 
     const handleUnsubscribe = async (teacherId) => {
         try {
-            await axios.post(`${API_BASE_URL}/api/unsubscribe`, {
+            const storedUser = localStorage.getItem('user');
+            if (!storedUser) {
+                throw new Error('Student not authenticated');
+            }
+
+            const studentId = JSON.parse(storedUser)?.id;
+            if (!studentId) {
+                throw new Error('Invalid user data');
+            }
+
+            await axios.post(`${API_URL}/api/unsubscribe`, {
                 student_id: studentId,
-                teacher_id: teacherId
+                teacher_id: teacherId,
             });
             fetchTeachers();
         } catch (err) {
-            setError('Failed to unsubscribe from teacher');
+            console.error('Error unsubscribing from teacher:', err);
+            setError(err.message || 'Failed to unsubscribe from teacher');
         }
     };
 
-    const subscribedTeachers = teachers.filter(teacher => subscriptions.has(teacher.id));
-    const unsubscribedTeachers = teachers.filter(teacher => !subscriptions.has(teacher.id));
-    const filteredUnsubscribedTeachers = unsubscribedTeachers.filter(teacher =>
+    const subscribedTeachers = teachers.filter((teacher) =>
+        subscriptions.some((sub) => sub.id === teacher.id)
+    );
+    const unsubscribedTeachers = teachers.filter(
+        (teacher) => !subscriptions.some((sub) => sub.id === teacher.id)
+    );
+    const filteredUnsubscribedTeachers = unsubscribedTeachers.filter((teacher) =>
         teacher.username.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     if (loading) {
-        return <div className="teacher-list"><div className="loading">Loading teachers...</div></div>;
+        return (
+            <div className="teacher-list">
+                <div className="loading">Loading teachers...</div>
+            </div>
+        );
     }
 
     if (error) {
-        return <div className="teacher-list"><div className="error-message">{error}</div></div>;
+        return (
+            <div className="teacher-list">
+                <div className="error-message">{error}</div>
+            </div>
+        );
     }
 
     return (

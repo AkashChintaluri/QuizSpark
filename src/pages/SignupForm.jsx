@@ -1,8 +1,9 @@
-// src/components/SignupForm.jsx
 import { useNavigate } from 'react-router-dom';
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './SignupForm.css';
+
+const API_URL = 'http://localhost:3000';
 
 function SignupForm() {
     const navigate = useNavigate();
@@ -10,10 +11,11 @@ function SignupForm() {
         username: '',
         email: '',
         password: '',
-        userType: 'student'
+        userType: 'student',
     });
     const [isLoading, setIsLoading] = useState(false);
     const [showPopup, setShowPopup] = useState(false);
+    const [errorMessage, setErrorMessage] = useState('');
 
     useEffect(() => {
         if (showPopup) {
@@ -23,7 +25,7 @@ function SignupForm() {
             }, 2000);
             return () => clearTimeout(timer);
         }
-    }, [showPopup, navigate]);
+    }, [showPopup, navigate, formData.userType]);
 
     const handleInputChange = (e) => {
         const { id, value } = e.target;
@@ -33,15 +35,23 @@ function SignupForm() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setIsLoading(true);
+        setErrorMessage('');
 
         try {
-            const response = await axios.post('http://localhost:3000/signup', formData);
-            setShowPopup(true);
-            console.log('Signup successful:', response.data);
+            const response = await axios.post(`${API_URL}/signup`, {
+                ...formData,
+                userType: formData.userType.toLowerCase()
+            });
+
+            if (response.data.success) {
+                localStorage.setItem('user', JSON.stringify(response.data.user));
+                setShowPopup(true);
+            } else {
+                setErrorMessage(response.data.message || 'Signup failed');
+            }
         } catch (error) {
-            const errorMessage =
-                error.response?.data?.error || 'Registration failed. Please try again.';
-            alert(errorMessage);
+            const serverError = error.response?.data?.error || error.message;
+            setErrorMessage(serverError || 'Signup failed. Please try again.');
             console.error('Signup error:', error);
         } finally {
             setIsLoading(false);
@@ -62,6 +72,7 @@ function SignupForm() {
                             required
                             placeholder="Username"
                             autoComplete="username"
+                            disabled={isLoading}
                         />
                     </div>
                     <div className="form-group">
@@ -73,6 +84,7 @@ function SignupForm() {
                             required
                             placeholder="Email"
                             autoComplete="email"
+                            disabled={isLoading}
                         />
                     </div>
                     <div className="form-group">
@@ -84,6 +96,7 @@ function SignupForm() {
                             required
                             placeholder="Password"
                             autoComplete="new-password"
+                            disabled={isLoading}
                         />
                     </div>
                     <div className="form-group select-group">
@@ -91,12 +104,14 @@ function SignupForm() {
                             id="userType"
                             value={formData.userType}
                             onChange={handleInputChange}
+                            disabled={isLoading}
                         >
                             <option value="student">Student</option>
                             <option value="teacher">Teacher</option>
                         </select>
                         <span className="select-placeholder">I am a</span>
                     </div>
+                    {errorMessage && <div className="error-message">{errorMessage}</div>}
                     <button
                         type="submit"
                         className="signup-button"
@@ -108,7 +123,7 @@ function SignupForm() {
             </div>
             {showPopup && (
                 <div className="popup success">
-                    ✅ Account created successfully! Redirecting to login...
+                    ✔️ Account created successfully! Redirecting to login...
                 </div>
             )}
         </div>

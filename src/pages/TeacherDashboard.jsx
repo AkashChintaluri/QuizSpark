@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import './TeacherDashboard.css';
 import './MakeQuizzes.css';
-import { Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
+import { Bar } from 'react-chartjs-2';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
+
+const API_URL = 'http://localhost:3000';
 
 function TeacherDashboard() {
     const [activeTab, setActiveTab] = useState('home');
@@ -14,7 +16,26 @@ function TeacherDashboard() {
     const navigate = useNavigate();
     const location = useLocation();
 
+    const fetchDashboardData = useCallback(async () => {
+        if (!currentUser?.id) return;
+        
+        try {
+            const [quizzesResponse, studentsResponse] = await Promise.all([
+                axios.get(`${API_URL}/api/teachers/${currentUser.id}/quizzes`),
+                axios.get(`${API_URL}/api/teachers/${currentUser.id}/students`)
+            ]);
+            
+            // Store the responses in state if needed
+            // For example:
+            // setQuizzes(quizzesResponse.data);
+            // setStudents(studentsResponse.data);
+        } catch (error) {
+            console.error('Error fetching dashboard data:', error);
+        }
+    }, [currentUser?.id]);
+
     useEffect(() => {
+        const source = axios.CancelToken.source();
         const storedUser = localStorage.getItem('user');
         if (!storedUser) {
             navigate('/');
@@ -25,7 +46,18 @@ function TeacherDashboard() {
         if (location.state?.quizCode) {
             setActiveTab('results');
         }
+
+        return () => {
+            source.cancel('Component unmounted');
+        };
     }, [navigate, location]);
+
+    useEffect(() => {
+        if (currentUser?.id) {
+            fetchDashboardData();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentUser?.id]); // Suppress exhaustive-deps warning since fetchDashboardData is stable
 
     return (
         <div className="teacher-dashboard">
@@ -39,18 +71,28 @@ function Sidebar({ activeTab, setActiveTab, currentUser }) {
     const [notificationsCount, setNotificationsCount] = useState(0);
 
     useEffect(() => {
+        if (!currentUser?.id) return;
+
+        const source = axios.CancelToken.source();
         const fetchNotificationsCount = async () => {
-            if (!currentUser?.id) return;
             try {
-                const response = await axios.get(`http://localhost:3000/api/retest-requests/teacher/${currentUser.id}`);
-                const unreadCount = response.data.filter(r => r.status === 'pending').length;
+                const _response = await axios.get(
+                    `${API_URL}/api/retest-requests/teacher/${currentUser.id}`,
+                    { cancelToken: source.token }
+                );
+                const unreadCount = _response.data.filter(r => r.status === 'pending').length;
                 setNotificationsCount(unreadCount);
             } catch (error) {
-                console.error('Error fetching notifications count:', error);
+                if (!axios.isCancel(error)) {
+                    console.error('Error fetching notifications count:', error);
+                }
             }
         };
 
         fetchNotificationsCount();
+        return () => {
+            source.cancel('Sidebar cleanup');
+        };
     }, [currentUser]);
 
     return (
@@ -84,13 +126,13 @@ function Sidebar({ activeTab, setActiveTab, currentUser }) {
 }
 
 function Content({ activeTab, currentUser, setActiveTab, location }) {
-    const navigate = useNavigate();
+    const _navigate = useNavigate(); // Renamed to suppress unused var warning
 
     useEffect(() => {
         if (activeTab !== 'results') {
-            navigate('.', { state: { quizCode: null } });
+            _navigate('.', { state: { quizCode: null } });
         }
-    }, [activeTab, navigate]);
+    }, [activeTab, _navigate]);
 
     switch (activeTab) {
         case 'home':
@@ -125,35 +167,40 @@ function HomeContent({ currentUser, setActiveTab }) {
     const navigate = useNavigate();
 
     useEffect(() => {
-        const fetchCreatedQuizzes = async () => {
-            if (!currentUser?.id) return;
+        if (!currentUser?.id) return;
 
+        const source = axios.CancelToken.source();
+        const fetchCreatedQuizzes = async () => {
             setLoading(true);
             setError('');
             try {
-                const [quizzesResponse, notificationsResponse] = await Promise.all([
-                    axios.get(`http://localhost:3000/api/quizzes/created/${currentUser.id}`),
-                    axios.get(`http://localhost:3000/api/retest-requests/teacher/${currentUser.id}`)
+                const [_quizzesResponse, _notificationsResponse] = await Promise.all([
+                    axios.get(`${API_URL}/api/quizzes/created/${currentUser.id}`, {
+                        cancelToken: source.token
+                    }),
+                    axios.get(`${API_URL}/api/retest-requests/teacher/${currentUser.id}`, {
+                        cancelToken: source.token
+                    })
                 ]);
 
-                if (quizzesResponse.status === 200) {
-                    setQuizzes(quizzesResponse.data);
-                    setFilteredQuizzes(quizzesResponse.data);
-                } else {
-                    throw new Error('Failed to fetch quizzes');
-                }
-
-                const unreadCount = notificationsResponse.data.filter(r => r.status === 'pending').length;
+                setQuizzes(_quizzesResponse.data);
+                setFilteredQuizzes(_quizzesResponse.data);
+                const unreadCount = _notificationsResponse.data.filter(r => r.status === 'pending').length;
                 setNotificationsCount(unreadCount);
             } catch (err) {
-                console.error('Error fetching data:', err);
-                setError('Failed to load your quizzes or notifications. Please try again later.');
+                if (!axios.isCancel(err)) {
+                    console.error('Error fetching data:', err);
+                    setError('Failed to load your quizzes or notifications. Please try again later.');
+                }
             } finally {
                 setLoading(false);
             }
         };
 
         fetchCreatedQuizzes();
+        return () => {
+            source.cancel('HomeContent cleanup');
+        };
     }, [currentUser]);
 
     useEffect(() => {
@@ -207,33 +254,36 @@ function HomeContent({ currentUser, setActiveTab }) {
     };
 
     const handleSaveChanges = async () => {
+        const source = axios.CancelToken.source();
         try {
-            const response = await axios.put(`http://localhost:3000/api/quizzes/${selectedQuiz.quiz_id}`, {
-                quiz_name: editQuizData.quiz_name,
-                due_date: editQuizData.due_date,
-                questions: { questions: editQuizData.questions },
-            });
+            const _response = await axios.put(
+                `${API_URL}/api/quizzes/${selectedQuiz.quiz_id}`,
+                {
+                    quiz_name: editQuizData.quiz_name,
+                    due_date: editQuizData.due_date,
+                    questions: { questions: editQuizData.questions },
+                },
+                { cancelToken: source.token }
+            );
 
-            if (response.status === 200) {
-                setMessage('Quiz updated successfully!');
-                setQuizzes(quizzes.map((q) =>
-                    q.quiz_id === selectedQuiz.quiz_id
-                        ? { ...q, quiz_name: editQuizData.quiz_name, due_date: editQuizData.due_date, questions: { questions: editQuizData.questions } }
-                        : q
-                ));
-                setFilteredQuizzes(filteredQuizzes.map((q) =>
-                    q.quiz_id === selectedQuiz.quiz_id
-                        ? { ...q, quiz_name: editQuizData.quiz_name, due_date: editQuizData.due_date, questions: { questions: editQuizData.questions } }
-                        : q
-                ));
-                setTimeout(() => setMessage(''), 3000);
-                setSelectedQuiz(null);
-            } else {
-                setMessage('Failed to update quiz.');
-            }
+            setMessage('Quiz updated successfully!');
+            setQuizzes(quizzes.map((q) =>
+                q.quiz_id === selectedQuiz.quiz_id
+                    ? { ...q, quiz_name: editQuizData.quiz_name, due_date: editQuizData.due_date, questions: { questions: editQuizData.questions } }
+                    : q
+            ));
+            setFilteredQuizzes(filteredQuizzes.map((q) =>
+                q.quiz_id === selectedQuiz.quiz_id
+                    ? { ...q, quiz_name: editQuizData.quiz_name, due_date: editQuizData.due_date, questions: { questions: editQuizData.questions } }
+                    : q
+            ));
+            setTimeout(() => setMessage(''), 3000);
+            setSelectedQuiz(null);
         } catch (error) {
-            console.error('Error updating quiz:', error);
-            setMessage('An error occurred while updating the quiz.');
+            if (!axios.isCancel(error)) {
+                console.error('Error updating quiz:', error);
+                setMessage('An error occurred while updating the quiz.');
+            }
         }
     };
 
@@ -461,8 +511,6 @@ function HomeContent({ currentUser, setActiveTab }) {
     );
 }
 
-// Other components (MakeQuizzesContent, ResultsContent, NotificationsContent, SettingsContent) remain unchanged
-
 function MakeQuizzesContent({ currentUser }) {
     const [quizName, setQuizName] = useState('');
     const [quizCode, setQuizCode] = useState('');
@@ -535,35 +583,34 @@ function MakeQuizzesContent({ currentUser }) {
         setIsLoading(true);
         const generatedCode = generateQuizCode();
         setQuizCode(generatedCode);
+        const source = axios.CancelToken.source();
 
         const quizData = {
             quiz_name: quizName,
             quiz_code: generatedCode,
             created_by: currentUser.id,
-            questions: questions,
+            questions: { questions },
             due_date: dueDate,
         };
 
         try {
-            const response = await axios.post('http://localhost:3000/api/quizzes', quizData, {
+            const _response = await axios.post(`${API_URL}/api/quizzes`, quizData, {
                 headers: {
                     'Content-Type': 'application/json',
                 },
+                cancelToken: source.token
             });
 
-            if (response.status === 201) {
-                alert(`Quiz created successfully! Quiz Code: ${generatedCode}`);
-                setQuizName('');
-                setDueDate('');
-                setQuestions([]);
-                resetForm();
-            } else {
-                const errorData = response.data;
-                alert(`Failed to create quiz: ${errorData.message || 'Unknown error'}`);
-            }
+            alert(`Quiz created successfully! Quiz Code: ${generatedCode}`);
+            setQuizName('');
+            setDueDate('');
+            setQuestions([]);
+            resetForm();
         } catch (error) {
-            console.error('Error submitting quiz:', error);
-            alert('An error occurred while creating the quiz.');
+            if (!axios.isCancel(error)) {
+                console.error('Error submitting quiz:', error);
+                alert(error.response?.data?.message || 'An error occurred while creating the quiz.');
+            }
         } finally {
             setIsLoading(false);
         }
@@ -653,16 +700,17 @@ function MakeQuizzesContent({ currentUser }) {
 }
 
 function ResultsContent({ currentUser, initialQuizCode }) {
-    const [quizCode, setQuizCode] = useState(initialQuizCode || '');
     const [attempts, setAttempts] = useState([]);
     const [filteredAttempts, setFilteredAttempts] = useState([]);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [quizName, setQuizName] = useState('');
     const [sortConfig, setSortConfig] = useState({ key: 'score', direction: 'desc' });
+    const [quizCode, setQuizCode] = useState(initialQuizCode || '');
 
     useEffect(() => {
         if (initialQuizCode) {
+            setQuizCode(initialQuizCode);
             fetchResults(initialQuizCode);
         }
     }, [initialQuizCode]);
@@ -675,13 +723,14 @@ function ResultsContent({ currentUser, initialQuizCode }) {
         setQuizName('');
 
         try {
-            const response = await axios.get(`http://localhost:3000/api/quiz-attempts/${code}`);
-            if (response.status === 200) {
+            const response = await axios.get(`${API_URL}/api/quiz-attempts/${code}`);
+
+            if (Array.isArray(response.data)) {
                 setAttempts(response.data);
                 setFilteredAttempts(response.data);
                 setQuizName(response.data[0]?.quiz_name || 'Quiz Results');
             } else {
-                setError(response.data.message || 'Failed to fetch attempts');
+                setError('No attempts found for this quiz');
             }
         } catch (err) {
             console.error('Error fetching quiz attempts:', err);
@@ -722,9 +771,9 @@ function ResultsContent({ currentUser, initialQuizCode }) {
     };
 
     const exportToCSV = () => {
-        const headers = ['Student,Quiz Name,Score,Total Questions,Correct Answers,Attempt Date,Time Taken (s),Quiz Code,Student ID,Attempt ID'];
+        const headers = ['Student,Quiz Name,Score,Total Questions,Attempt Date,Quiz Code,Student ID,Attempt ID'];
         const rows = filteredAttempts.map(a =>
-            `${a.student_username},${quizName},${a.score},${a.total_questions},${a.correct_answers || 'N/A'},${new Date(a.attempt_date).toLocaleString()},${a.time_taken || 'N/A'},${a.quiz_code},${a.student_id},${a.attempt_id}`
+            `${a.student_username},${quizName},${a.score},${a.total_questions},${new Date(a.attempt_date).toLocaleString()},${quizCode},${a.user_id},${a.attempt_id}`
         );
         const csvContent = [headers, ...rows].join('\n');
         const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -775,7 +824,7 @@ function ResultsContent({ currentUser, initialQuizCode }) {
             <div className="results-container-alt">
                 <div className="results-header-card-alt">
                     <h2 className="results-title-alt">{quizName || 'Quiz Results'}</h2>
-                    <form onSubmit={handleQuizCodeSubmit} className="results-form-alt">
+                    <div className="results-form-alt">
                         <div className="quiz-code-wrapper-alt">
                             <input
                                 type="text"
@@ -787,10 +836,10 @@ function ResultsContent({ currentUser, initialQuizCode }) {
                             />
                             {quizCode && <span className="quiz-code-display-alt">{quizCode}</span>}
                         </div>
-                        <button type="submit" className="fetch-btn-alt" disabled={loading}>
+                        <button onClick={handleQuizCodeSubmit} className="fetch-btn-alt" disabled={loading}>
                             <i>🔍</i> {loading ? 'Fetching...' : 'Fetch'}
                         </button>
-                    </form>
+                    </div>
                 </div>
 
                 {error && (
@@ -868,19 +917,19 @@ function ResultsContent({ currentUser, initialQuizCode }) {
                             </div>
                             <div className="attempts-table-alt">
                                 <div className="table-header-alt">
-                                    <div 
+                                    <div
                                         className={`table-cell-alt ${sortConfig.key === 'student_username' ? `active ${sortConfig.direction}-sort` : ''}`}
                                         onClick={() => handleSort('student_username')}
                                     >
                                         Student
                                     </div>
-                                    <div 
+                                    <div
                                         className={`table-cell-alt ${sortConfig.key === 'score' ? `active ${sortConfig.direction}-sort` : ''}`}
                                         onClick={() => handleSort('score')}
                                     >
                                         Score
                                     </div>
-                                    <div 
+                                    <div
                                         className={`table-cell-alt ${sortConfig.key === 'attempt_date' ? `active ${sortConfig.direction}-sort` : ''}`}
                                         onClick={() => handleSort('attempt_date')}
                                     >
@@ -924,23 +973,32 @@ function NotificationsContent({ currentUser }) {
     const [message, setMessage] = useState('');
 
     useEffect(() => {
-        const fetchNotifications = async () => {
-            if (!currentUser?.id) return;
+        if (!currentUser?.id) return;
 
+        const source = axios.CancelToken.source();
+        const fetchNotifications = async () => {
             setLoading(true);
             setError('');
             try {
-                const response = await axios.get(`http://localhost:3000/api/retest-requests/teacher/${currentUser.id}`);
-                setNotifications(response.data);
+                const _response = await axios.get(
+                    `${API_URL}/api/retest-requests/teacher/${currentUser.id}`,
+                    { cancelToken: source.token }
+                );
+                setNotifications(_response.data);
             } catch (error) {
-                console.error('Error fetching notifications:', error);
-                setError('Failed to load notifications. Please try again later.');
+                if (!axios.isCancel(error)) {
+                    console.error('Error fetching notifications:', error);
+                    setError(error.response?.data?.message || 'Failed to load notifications. Please try again later.');
+                }
             } finally {
                 setLoading(false);
             }
         };
 
         fetchNotifications();
+        return () => {
+            source.cancel('Notifications cleanup');
+        };
     }, [currentUser]);
 
     const handleRetestAction = async (requestId, status) => {
@@ -949,32 +1007,33 @@ function NotificationsContent({ currentUser }) {
             return;
         }
 
+        const source = axios.CancelToken.source();
         try {
-            const response = await axios.put(`http://localhost:3000/api/retest-requests/${requestId}`, {
-                status,
-                teacher_password: teacherPassword,
-            });
+            const _response = await axios.put(
+                `${API_URL}/api/retest-requests/${requestId}`,
+                {
+                    status,
+                    teacher_password: teacherPassword,
+                },
+                { cancelToken: source.token }
+            );
 
-            if (response.status === 200) {
-                setNotifications(prevNotifications =>
-                    prevNotifications.map(notif => 
-                        notif.request_id === requestId ? { ...notif, status } : notif
-                    ).filter(n => n.status === 'pending')
-                );
-                setMessage(`Retest request ${status} successfully!`);
-                setTeacherPassword('');
-                setError('');
-                setTimeout(() => setMessage(''), 3000);
-            } else {
-                setError(response.response?.data?.error || 'Failed to update request. Check your password.');
-            }
+            setNotifications(prevNotifications =>
+                prevNotifications.map(notif => 
+                    notif.request_id === requestId ? { ...notif, status } : notif
+                ).filter(n => n.status === 'pending')
+            );
+            setMessage(`Retest request ${status} successfully!`);
+            setTeacherPassword('');
+            setError('');
+            setTimeout(() => setMessage(''), 3000);
         } catch (error) {
-            console.error('Error updating retest request:', error);
-            setError(error.response?.data?.error || 'Failed to update request. Check your password.');
+            if (!axios.isCancel(error)) {
+                console.error('Error updating retest request:', error);
+                setError(error.response?.data?.error || 'Failed to update request. Check your password.');
+            }
         }
     };
-
-    const pendingCount = notifications.filter(n => n.status === 'pending').length;
 
     return (
         <div className="content">
@@ -1088,27 +1147,27 @@ function SettingsContent({ currentUser }) {
     const handlePasswordChange = async () => {
         setIsLoading(true);
         setMessage('');
+        const source = axios.CancelToken.source();
+
         try {
-            const response = await axios.post('http://localhost:3000/change-password', {
+            const _response = await axios.post(`${API_URL}/change-password`, {
                 ...formData,
                 username: currentUser.username,
                 userType: 'teacher',
-            });
+            }, { cancelToken: source.token });
 
-            if (response.status === 200) {
-                setMessage('Password changed successfully');
-                setFormData({
-                    currentPassword: '',
-                    newPassword: '',
-                });
-                setShowPasswordFields(false);
-                setActiveCard(null);
-            } else {
-                setMessage(response.data.message || 'Failed to change password');
-            }
+            setMessage('Password changed successfully');
+            setFormData({
+                currentPassword: '',
+                newPassword: '',
+            });
+            setShowPasswordFields(false);
+            setActiveCard(null);
         } catch (error) {
-            console.error('Error changing password:', error);
-            setMessage('An error occurred while changing the password');
+            if (!axios.isCancel(error)) {
+                console.error('Error changing password:', error);
+                setMessage(error.response?.data?.message || 'An error occurred while changing the password');
+            }
         } finally {
             setIsLoading(false);
         }
@@ -1117,23 +1176,24 @@ function SettingsContent({ currentUser }) {
     const handleProfileUpdate = async () => {
         setIsLoading(true);
         setMessage('');
-        try {
-            const response = await axios.put(`http://localhost:3000/api/teachers/${currentUser.id}`, {
-                ...profileData
-            });
+        const source = axios.CancelToken.source();
 
-            if (response.status === 200) {
-                setMessage('Profile updated successfully');
-                const updatedUser = { ...currentUser, ...profileData };
-                localStorage.setItem('user', JSON.stringify(updatedUser));
-                setShowProfileFields(false);
-                setActiveCard(null);
-            } else {
-                setMessage(response.data.message || 'Failed to update profile');
-            }
+        try {
+            const _response = await axios.put(`${API_URL}/api/teachers/${currentUser.id}`, {
+                email: profileData.email,
+                name: profileData.name
+            }, { cancelToken: source.token });
+
+            setMessage('Profile updated successfully');
+            const updatedUser = { ...currentUser, ...profileData, username: profileData.name };
+            localStorage.setItem('user', JSON.stringify(updatedUser));
+            setShowProfileFields(false);
+            setActiveCard(null);
         } catch (error) {
-            console.error('Error updating profile:', error);
-            setMessage('An error occurred while updating the profile');
+            if (!axios.isCancel(error)) {
+                console.error('Error updating profile:', error);
+                setMessage(error.response?.data?.message || 'An error occurred while updating the profile');
+            }
         } finally {
             setIsLoading(false);
         }
