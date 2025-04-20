@@ -39,5 +39,4 @@ app.post('/signup', async (req, res) => {
     }
 });
 
-// Export the handler for Vercel
-module.exports = serverless(app);
+module.exports.handler = serverless(app)

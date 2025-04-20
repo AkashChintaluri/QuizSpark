@@ -70,4 +70,4 @@ app.get('/:quiz_code/leaderboard', async (req, res) => {
     }
 });
 
-module.exports = serverless(app);
+module.exports.handler = serverless(app)

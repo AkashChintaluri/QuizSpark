@@ -69,4 +69,4 @@ app.get('/:user_id', async (req, res) => {
     }
 });
 
-module.exports = serverless(app);
+module.exports.handler = serverless(app)

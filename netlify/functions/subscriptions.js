@@ -57,4 +57,4 @@ app.get('/:student_id', async (req, res) => {
     }
 });
 
-module.exports = serverless(app);
+module.exports.handler = serverless(app)

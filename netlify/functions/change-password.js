@@ -54,5 +54,4 @@ app.post('/change-password', async (req, res) => {
     }
 });
 
-// Export for Vercel
-module.exports = serverless(app);
+module.exports.handler = serverless(app)

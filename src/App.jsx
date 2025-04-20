@@ -9,6 +9,7 @@ import TeacherLogin from './pages/TeacherLogin';
 import SignupForm from './pages/SignupForm';
 import StudentDashboard from './pages/StudentDashboard';
 import TeacherDashboard from './pages/TeacherDashboard';
+import NotFound from './pages/NotFound';
 import Header from './components/Header';
 
 const Layout = ({ children }) => {
@@ -46,6 +47,9 @@ function App() {
                         </Route>
 
                         <Route path="/teacher-dashboard" element={<Layout><TeacherDashboard /></Layout>} />
+                        
+                        {/* 404 Route - This should be the last route */}
+                        <Route path="*" element={<Layout><NotFound /></Layout>} />
                     </Routes>
                 </div>
             </Router>

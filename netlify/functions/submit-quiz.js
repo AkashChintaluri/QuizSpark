@@ -80,4 +80,4 @@ app.post('/', async (req, res) => {
     }
 });
 
-module.exports = serverless(app);
+module.exports.handler = serverless(app)

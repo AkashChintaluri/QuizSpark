@@ -166,4 +166,4 @@ app.get('/:quiz_code', async (req, res) => {
     }
 });
 
-module.exports = serverless(app);
+module.exports.handler = serverless(app)
