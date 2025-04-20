@@ -650,7 +650,7 @@ function LeaderboardContent({ currentUser }) {
         setLoading(true);
         setError('');
         try {
-            const response = await axios.get(`${API_URL}/api/quiz-results/${code}/leaderboard`);
+            const response = await axios.get(`${API_URL}/api/quiz-result/${code}/leaderboard`);
             if (response.status !== 200) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
@@ -782,7 +782,7 @@ function SettingsContent({ currentUser }) {
         setIsLoading(true);
         setMessage('');
         try {
-            const response = await axios.post(`${API_URL}/change-password`, {
+            const response = await axios.post(`${API_URL}/users/change-password`, {
                 ...formData,
                 username: currentUser.username,
                 userType: 'student',

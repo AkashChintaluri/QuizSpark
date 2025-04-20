@@ -1150,7 +1150,7 @@ function SettingsContent({ currentUser }) {
         const source = axios.CancelToken.source();
 
         try {
-            const _response = await axios.post(`${API_URL}/change-password`, {
+            const _response = await axios.post(`${API_URL}/users/change-password`, {
                 ...formData,
                 username: currentUser.username,
                 userType: 'teacher',

@@ -38,7 +38,7 @@ function SignupForm() {
         setErrorMessage('');
 
         try {
-            const response = await axios.post(`${API_URL}/signup`, {
+            const response = await axios.post(`${API_URL}/users/signup`, {
                 ...formData,
                 userType: formData.userType.toLowerCase()
             });
