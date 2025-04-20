@@ -1,9 +1,9 @@
+// api/users.js
 const express = require('express');
 const serverless = require('serverless-http');
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 
-// Initialize Supabase client with environment variables
 const supabase = createClient(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_KEY
@@ -12,6 +12,9 @@ const supabase = createClient(
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Unified router for all user operations
+const router = express.Router();
 
 // LOGIN: POST /api/users/login
 app.post('/login', async (req, res) => {
@@ -111,5 +114,7 @@ app.post('/change-password', async (req, res) => {
         });
     }
 });
+
+app.use('/users', router);
 
 module.exports.handler = serverless(app);
