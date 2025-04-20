@@ -33,7 +33,7 @@ function StudentLogin() {
         setErrorMessage('');
 
         try {
-            const response = await axios.post(`${API_URL}/users/login`, {
+            const response = await axios.post(`${API_URL}/login`, {
                 ...formData,
                 userType: 'student',
             });
